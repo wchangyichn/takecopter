@@ -181,6 +181,25 @@ npm run tauri:build
 
 ## 6. 开发与验证命令
 
+### 根目录统一构建脚本（按平台产物）
+
+```bash
+# 只构建 Web 产物
+npm run build -- --platform web
+
+# 构建 macOS 桌面产物（.app/.dmg）
+npm run build -- --platform macos
+
+# 构建 Windows 桌面产物（需 Windows 环境）
+npm run build -- --platform windows
+
+# 一次触发多平台
+npm run build -- --platform web,macos
+
+# 尝试 all（移动端未实现时可加跳过参数）
+npm run build -- --platform all --allow-missing-mobile
+```
+
 ```bash
 cd apps/desktop
 npm run lint

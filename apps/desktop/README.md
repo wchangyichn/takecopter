@@ -6,6 +6,13 @@ Desktop/Web 客户端工程。
 
 - `README.md`
 
+根目录统一平台构建脚本：
+
+```bash
+cd ../..
+npm run build -- --platform web|macos|windows
+```
+
 常用命令：
 
 ```bash
