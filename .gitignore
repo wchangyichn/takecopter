@@ -1,0 +1,13 @@
+.DS_Store
+
+# Root dependencies and build outputs
+node_modules/
+dist/
+build/
+
+# Desktop app generated outputs
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/desktop/.vite/
