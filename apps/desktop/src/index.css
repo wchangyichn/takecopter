@@ -1,0 +1,296 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TAKECOPTER DESIGN SYSTEM
+   A colorful, high-interaction creative tool aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Typography */
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  
+  /* Font Sizes */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 2rem;
+  --text-4xl: 2.5rem;
+  
+  /* Spacing Scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  
+  /* Core Colors - Vibrant Multi-Color Palette */
+  --coral-50: #fff5f2;
+  --coral-100: #ffe8e1;
+  --coral-200: #ffd5c8;
+  --coral-300: #ffb5a0;
+  --coral-400: #ff8a6a;
+  --coral-500: #f96b47;
+  --coral-600: #e64d2a;
+  --coral-700: #c13a1d;
+  --coral-800: #9f331c;
+  --coral-900: #85311d;
+  
+  --violet-50: #f5f3ff;
+  --violet-100: #ede9fe;
+  --violet-200: #ddd6fe;
+  --violet-300: #c4b5fd;
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+  --violet-700: #6d28d9;
+  --violet-800: #5b21b6;
+  --violet-900: #4c1d95;
+  
+  --teal-50: #f0fdfa;
+  --teal-100: #ccfbf1;
+  --teal-200: #99f6e4;
+  --teal-300: #5eead4;
+  --teal-400: #2dd4bf;
+  --teal-500: #14b8a6;
+  --teal-600: #0d9488;
+  --teal-700: #0f766e;
+  --teal-800: #115e59;
+  --teal-900: #134e4a;
+  
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-200: #fde68a;
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+  --amber-800: #92400e;
+  --amber-900: #78350f;
+  
+  --rose-50: #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-200: #fecdd3;
+  --rose-300: #fda4af;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+  --rose-700: #be123c;
+  --rose-800: #9f1239;
+  --rose-900: #881337;
+  
+  /* Neutral Slate */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+  
+  /* Semantic Colors */
+  --color-primary: var(--coral-500);
+  --color-primary-hover: var(--coral-600);
+  --color-primary-light: var(--coral-100);
+  
+  --color-accent: var(--violet-500);
+  --color-accent-hover: var(--violet-600);
+  --color-accent-light: var(--violet-100);
+  
+  --color-success: var(--teal-500);
+  --color-success-light: var(--teal-100);
+  
+  --color-warning: var(--amber-500);
+  --color-warning-light: var(--amber-100);
+  
+  --color-danger: var(--rose-500);
+  --color-danger-light: var(--rose-100);
+  
+  /* Background System - Layered Gradient */
+  --bg-base: #fafbfc;
+  --bg-elevated: #ffffff;
+  --bg-sunken: var(--slate-100);
+  --bg-overlay: rgba(15, 23, 42, 0.5);
+  
+  /* Gradient Mesh Background */
+  --gradient-mesh: 
+    radial-gradient(at 40% 20%, var(--coral-100) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, var(--violet-100) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, var(--teal-100) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, var(--amber-100) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, var(--rose-100) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, var(--violet-50) 0px, transparent 50%);
+  
+  /* Border System */
+  --border-light: var(--slate-200);
+  --border-default: var(--slate-300);
+  --border-focus: var(--coral-400);
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-colored: 0 8px 30px -12px var(--coral-400);
+  
+  /* Border Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
+  --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  
+  /* Z-Index Scale */
+  --z-base: 0;
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+}
+
+/* Dark Mode Override */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-base: var(--slate-900);
+    --bg-elevated: var(--slate-800);
+    --bg-sunken: var(--slate-950);
+    
+    --gradient-mesh: 
+      radial-gradient(at 40% 20%, rgba(249, 107, 71, 0.15) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, rgba(20, 184, 166, 0.1) 0px, transparent 50%),
+      radial-gradient(at 80% 50%, rgba(245, 158, 11, 0.1) 0px, transparent 50%);
+    
+    --border-light: var(--slate-700);
+    --border-default: var(--slate-600);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE RESET
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--slate-800);
+  background-color: var(--bg-base);
+  background-image: var(--gradient-mesh);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: var(--slate-200);
+  }
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--slate-900);
+}
+
+@media (prefers-color-scheme: dark) {
+  h1, h2, h3, h4 {
+    color: var(--slate-50);
+  }
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOCUS STATES - Accessibility
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

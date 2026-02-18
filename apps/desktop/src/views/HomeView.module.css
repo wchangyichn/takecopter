@@ -1,0 +1,308 @@
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  animation: fadeIn 300ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-8);
+}
+
+.headerContent h2 {
+  margin: 0 0 var(--space-1) 0;
+  font-size: var(--text-3xl);
+}
+
+.headerContent p {
+  margin: 0;
+  color: var(--slate-500);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-8);
+}
+
+.storiesSection {
+  min-width: 0;
+}
+
+.storyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-5);
+}
+
+.emptyCard {
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.emptyCard h3 {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.emptyCard p {
+  margin: 0;
+  color: var(--slate-500);
+}
+
+.storyCard {
+  animation: cardEnter 400ms ease-out both;
+}
+
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cardCover {
+  height: 120px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cardCoverInner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+}
+
+.cardIcon {
+  width: 48px;
+  height: 48px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.cardIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cardContent {
+  padding: var(--space-4);
+}
+
+.cardTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  margin: 0 0 var(--space-2) 0;
+  color: var(--slate-800);
+}
+
+.cardDesc {
+  font-size: var(--text-sm);
+  color: var(--slate-500);
+  margin: 0 0 var(--space-3) 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cardMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cardDate {
+  font-size: var(--text-xs);
+  color: var(--slate-400);
+}
+
+.cardActions {
+  display: flex;
+  gap: var(--space-1);
+  animation: fadeIn 150ms ease-out;
+}
+
+.cardAction {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--slate-100);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--slate-500);
+  transition: all var(--transition-fast);
+}
+
+.cardAction:hover {
+  background: var(--coral-100);
+  color: var(--coral-600);
+}
+
+.cardAction svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.quickActions h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+  margin: 0 0 var(--space-4) 0;
+}
+
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--slate-700);
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.actionItem:hover {
+  background: var(--slate-50);
+}
+
+.actionIcon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.actionIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.recentPanel h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+  margin: 0 0 var(--space-4) 0;
+}
+
+.activityList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.activityItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.activityText {
+  flex: 1;
+  color: var(--slate-600);
+}
+
+.activityText strong {
+  color: var(--slate-800);
+}
+
+.activityTime {
+  font-size: var(--text-xs);
+  color: var(--slate-400);
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .sidebar > * {
+    flex: 1;
+    min-width: 280px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .headerContent p {
+    color: var(--slate-400);
+  }
+
+  .cardTitle {
+    color: var(--slate-100);
+  }
+
+  .cardDesc {
+    color: var(--slate-400);
+  }
+
+  .actionItem {
+    color: var(--slate-200);
+  }
+
+  .actionItem:hover {
+    background: var(--slate-700);
+  }
+
+  .activityText {
+    color: var(--slate-300);
+  }
+
+  .activityText strong {
+    color: var(--slate-100);
+  }
+}

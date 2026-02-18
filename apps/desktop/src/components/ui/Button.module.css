@@ -1,0 +1,130 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  white-space: nowrap;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.sm {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.md {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-base);
+}
+
+.lg {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-lg);
+}
+
+.primary {
+  background: linear-gradient(135deg, var(--coral-400), var(--coral-500));
+  color: white;
+  box-shadow: var(--shadow-md), 0 4px 14px -3px var(--coral-400);
+}
+
+.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
+  box-shadow: var(--shadow-lg), 0 6px 20px -3px var(--coral-500);
+  transform: translateY(-1px);
+}
+
+.secondary {
+  background: var(--bg-elevated);
+  color: var(--slate-700);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--slate-50);
+  border-color: var(--coral-300);
+  color: var(--coral-600);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--slate-600);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--slate-100);
+  color: var(--slate-800);
+}
+
+.danger {
+  background: linear-gradient(135deg, var(--rose-400), var(--rose-500));
+  color: white;
+}
+
+.danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--rose-500), var(--rose-600));
+}
+
+.spinner {
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.hidden {
+  visibility: hidden;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .secondary {
+    background: var(--slate-800);
+    color: var(--slate-200);
+    border-color: var(--slate-600);
+  }
+
+  .secondary:hover:not(:disabled) {
+    background: var(--slate-700);
+    border-color: var(--coral-400);
+    color: var(--coral-300);
+  }
+
+  .ghost {
+    color: var(--slate-400);
+  }
+
+  .ghost:hover:not(:disabled) {
+    background: var(--slate-800);
+    color: var(--slate-200);
+  }
+}

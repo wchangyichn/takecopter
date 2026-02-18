@@ -1,0 +1,283 @@
+.statusBar {
+  height: 56px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+.left, .right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.right {
+  justify-content: flex-end;
+}
+
+.center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+}
+
+.storyInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.homeTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: 0;
+  color: var(--slate-800);
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--slate-600);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.backButton:hover {
+  border-color: var(--coral-400);
+  color: var(--coral-600);
+}
+
+.backButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.storyTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-light);
+  background: var(--slate-100);
+}
+
+.storyTab {
+  border: none;
+  background: transparent;
+  color: var(--slate-500);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-full);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.activeTab {
+  background: var(--bg-elevated);
+  color: var(--coral-600);
+  box-shadow: var(--shadow-sm);
+}
+
+.storyIcon {
+  width: 20px;
+  height: 20px;
+  color: var(--coral-500);
+}
+
+.storyIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.storyTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 400;
+  color: var(--slate-800);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--slate-100);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  width: 100%;
+  max-width: 400px;
+  transition: all var(--transition-fast);
+}
+
+.searchBar:focus-within {
+  background: var(--bg-elevated);
+  border-color: var(--coral-400);
+  box-shadow: 0 0 0 3px var(--coral-100);
+}
+
+.searchIcon {
+  width: 18px;
+  height: 18px;
+  color: var(--slate-400);
+  flex-shrink: 0;
+}
+
+.searchIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.searchInput {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--slate-700);
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--slate-400);
+}
+
+.searchKbd {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--slate-400);
+  background: var(--slate-200);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.iconButton {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--slate-500);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.iconButton:hover {
+  background: var(--slate-100);
+  color: var(--slate-700);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--coral-400);
+  outline-offset: 2px;
+}
+
+.iconButton svg {
+  width: 20px;
+  height: 20px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--coral-400), var(--violet-500));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.avatar:hover {
+  transform: scale(1.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .statusBar {
+    background: rgba(30, 41, 59, 0.8);
+    border-bottom-color: var(--slate-700);
+  }
+
+  .storyTitle {
+    color: var(--slate-100);
+  }
+
+  .homeTitle {
+    color: var(--slate-100);
+  }
+
+  .backButton {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+    color: var(--slate-300);
+  }
+
+  .backButton:hover {
+    border-color: var(--coral-500);
+    color: var(--coral-400);
+  }
+
+  .storyTabs {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+  }
+
+  .storyTab {
+    color: var(--slate-400);
+  }
+
+  .activeTab {
+    background: var(--slate-700);
+    color: var(--coral-400);
+  }
+
+  .searchBar {
+    background: var(--slate-800);
+  }
+
+  .searchBar:focus-within {
+    background: var(--slate-700);
+    border-color: var(--coral-500);
+    box-shadow: 0 0 0 3px rgba(249, 107, 71, 0.2);
+  }
+
+  .searchInput {
+    color: var(--slate-200);
+  }
+
+  .searchKbd {
+    background: var(--slate-700);
+  }
+
+  .iconButton:hover {
+    background: var(--slate-700);
+    color: var(--slate-200);
+  }
+}
