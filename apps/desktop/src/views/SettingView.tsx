@@ -46,13 +46,19 @@ function uniqueCategories(cards: EditableCard[]): string[] {
   return Array.from(set);
 }
 
-function allTags(cards: EditableCard[]): SettingTag[] {
+function allTags(cards: EditableCard[], extraTags: SettingTag[] = []): SettingTag[] {
   const map = new Map<string, string>();
+
+  extraTags.forEach((tag) => {
+    const name = normalizeTagName(tag.name);
+    if (name) {
+      map.set(name, tag.color);
+    }
+  });
+
   cards.forEach((card) => {
     card.tags.forEach((tag) => {
-      if (!map.has(tag.name)) {
-        map.set(tag.name, tag.color);
-      }
+      map.set(tag.name, tag.color);
     });
   });
 
@@ -73,13 +79,14 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   const [newCategory, setNewCategory] = useState('');
   const [tagNameDraft, setTagNameDraft] = useState('');
   const [tagColorDraft, setTagColorDraft] = useState('#ff8a6a');
+  const [customTags, setCustomTags] = useState<SettingTag[]>([]);
   const [categories, setCategories] = useState<string[]>(() => uniqueCategories(normalizeCards(sourceCards)));
   const [dragState, setDragState] = useState<DragState | null>(null);
   const localIdRef = useRef(0);
   const cardsRef = useRef<EditableCard[]>(cards);
 
   const selectedCard = useMemo(() => cards.find((item) => item.id === selectedCardId) ?? null, [cards, selectedCardId]);
-  const tagOptions = useMemo(() => allTags(cards), [cards]);
+  const tagOptions = useMemo(() => allTags(cards, customTags), [cards, customTags]);
 
   const totalByType = useMemo(() => {
     return typeOrder.reduce<Record<SettingCard['type'], number>>((acc, type) => {
@@ -261,7 +268,20 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   };
 
   const handleCreateTag = () => {
-    addTagToSelected(tagNameDraft, tagColorDraft);
+    const normalized = normalizeTagName(tagNameDraft);
+    if (!normalized) {
+      return;
+    }
+
+    setCustomTags((prev) => {
+      const exists = prev.some((tag) => tag.name === normalized);
+      if (exists) {
+        return prev.map((tag) => (tag.name === normalized ? { ...tag, color: tagColorDraft } : tag));
+      }
+      return [...prev, { name: normalized, color: tagColorDraft }];
+    });
+
+    addTagToSelected(normalized, tagColorDraft);
     setTagNameDraft('');
   };
 
@@ -277,6 +297,14 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   };
 
   const handleSetTagColor = (name: string, color: string) => {
+    setCustomTags((prev) => {
+      const exists = prev.some((tag) => tag.name === name);
+      if (!exists) {
+        return [...prev, { name, color }];
+      }
+      return prev.map((tag) => (tag.name === name ? { ...tag, color } : tag));
+    });
+
     applyCards((prev) =>
       prev.map((card) => ({
         ...card,
