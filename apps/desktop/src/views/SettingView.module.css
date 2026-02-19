@@ -453,6 +453,8 @@
   padding: var(--space-6);
   position: relative;
   animation: slideInRight 250ms ease-out;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .summaryPanel {
@@ -558,6 +560,12 @@
 
 .detailQuickCreateRow {
   margin-top: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.detailCategoryRow {
   display: flex;
   gap: var(--space-2);
   align-items: center;
@@ -708,6 +716,215 @@
   padding: 24px;
 }
 
+.editorOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg-overlay);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.editorPage {
+  width: min(1180px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-6);
+}
+
+.editorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-5);
+}
+
+.editorEyebrow {
+  margin: 0 0 var(--space-1) 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+
+.editorTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--slate-800);
+}
+
+.editorGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.editorColumn {
+  min-width: 0;
+}
+
+.customFieldCreateRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.customFieldPresetRow {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.customFieldPreset {
+  border: 1px solid var(--border-light);
+  background: var(--slate-50);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--slate-600);
+  cursor: pointer;
+}
+
+.customFieldPreset:hover {
+  border-color: var(--coral-300);
+  color: var(--coral-600);
+}
+
+.customFieldList {
+  margin-top: var(--space-3);
+  column-count: 2;
+  column-gap: var(--space-3);
+}
+
+.fieldBoardHint {
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
+.fieldBoard {
+  margin-top: var(--space-2);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  min-height: 560px;
+  position: relative;
+  overflow: auto;
+}
+
+.fieldBoardFullPage {
+  margin-top: var(--space-2);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  min-height: min(76vh, 920px);
+  position: relative;
+  overflow: auto;
+}
+
+.fieldBoardItem {
+  position: absolute;
+  margin-bottom: 0;
+  z-index: 1;
+}
+
+.draggingField {
+  z-index: 4;
+  box-shadow: var(--shadow-lg);
+}
+
+.fieldCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  cursor: move;
+  user-select: none;
+}
+
+.fieldCardHandle {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
+.customFieldItem {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--slate-50);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  break-inside: avoid;
+  margin-bottom: var(--space-3);
+}
+
+.fieldSizesm {
+  min-height: 140px;
+}
+
+.fieldSizemd {
+  min-height: 210px;
+}
+
+.fieldSizelg {
+  min-height: 290px;
+}
+
+.customFieldSizeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.customFieldSizeLabel {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+  margin-right: var(--space-1);
+}
+
+.customFieldSizeButton {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--slate-600);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.customFieldSizeButtonActive {
+  border-color: var(--coral-300);
+  background: var(--coral-100);
+  color: var(--coral-700);
+}
+
+.customFieldPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.customFieldChip {
+  border: 1px solid var(--border-light);
+  background: var(--slate-50);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--slate-600);
+}
+
 .managerCard {
   width: min(560px, 100%);
   background: var(--bg-elevated);
@@ -742,6 +959,28 @@
   overflow-y: auto;
 }
 
+.templatePickItem {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--slate-50);
+  padding: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.templatePickItem:hover {
+  border-color: var(--coral-300);
+}
+
+.templatePickMeta {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
 .managerListItem {
   display: flex;
   align-items: center;
@@ -764,6 +1003,14 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.managerInlineEditor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
 }
 
 .tagPaletteItem {
@@ -814,6 +1061,15 @@
 .detailHeader {
   margin-bottom: var(--space-6);
   padding-right: var(--space-8);
+}
+
+.detailDeleteCardButton {
+  margin-top: var(--space-3);
+  color: var(--rose-600);
+}
+
+.detailDeleteCardButton:hover {
+  background: var(--rose-50);
 }
 
 .detailType {
@@ -1051,6 +1307,60 @@
     border-color: var(--slate-600);
   }
 
+  .editorPage {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+  }
+
+  .editorEyebrow {
+    color: var(--slate-400);
+  }
+
+  .editorTitle {
+    color: var(--slate-100);
+  }
+
+  .customFieldPreset,
+  .customFieldChip,
+  .customFieldItem {
+    background: var(--slate-700);
+    border-color: var(--slate-600);
+    color: var(--slate-200);
+  }
+
+  .customFieldPreset:hover {
+    border-color: var(--coral-400);
+    color: var(--coral-300);
+  }
+
+  .customFieldSizeLabel {
+    color: var(--slate-300);
+  }
+
+  .customFieldSizeButton {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+    color: var(--slate-300);
+  }
+
+  .customFieldSizeButtonActive {
+    background: rgba(249, 107, 71, 0.16);
+    color: var(--coral-200);
+    border-color: var(--coral-400);
+  }
+
+  .fieldBoard,
+  .fieldBoardFullPage {
+    border-color: var(--slate-600);
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px), linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .fieldBoardHint,
+  .fieldCardHandle {
+    color: var(--slate-300);
+  }
+
   .managerHeader h3,
   .managerTagName {
     color: var(--slate-100);
@@ -1058,6 +1368,15 @@
 
   .managerListItem {
     background: var(--slate-700);
+  }
+
+  .templatePickItem {
+    background: var(--slate-700);
+    border-color: var(--slate-600);
+  }
+
+  .templatePickMeta {
+    color: var(--slate-300);
   }
 
   .categoryFilter:hover {
@@ -1104,5 +1423,15 @@
 
   .relationTarget {
     color: var(--slate-100);
+  }
+}
+
+@media (max-width: 1100px) {
+  .editorGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .customFieldList {
+    column-count: 1;
   }
 }
