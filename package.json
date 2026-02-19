@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "platform": "bash scripts/platform.sh",
+    "platform:mac": "bash scripts/platform.sh mac-build",
+    "platform:web": "bash scripts/platform.sh web-dev"
   }
 }
