@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { ProjectData, SettingCard, Story, TreeNode } from '../types';
 import type { CreateStoryInput, ExportedProjectData, ProjectDataRepository } from './repositoryTypes';
 
@@ -26,16 +26,44 @@ function hydrateProjectData(data: SerializedProjectData): ProjectData {
 
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') {
-    return false;
+    return isTauri();
   }
 
-  return '__TAURI_INTERNALS__' in window;
+  return isTauri() || '__TAURI_INTERNALS__' in window;
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return '未知错误';
+    }
+  }
+
+  return '未知错误';
 }
 
 class TauriRepository implements ProjectDataRepository {
   async load(): Promise<ProjectData> {
-    const response = await invoke<EnsureProjectResponse>('ensure_project');
-    return hydrateProjectData(response.data);
+    try {
+      const response = await invoke<EnsureProjectResponse>('ensure_project');
+      return hydrateProjectData(response.data);
+    } catch (error) {
+      throw new Error(formatUnknownError(error));
+    }
   }
 
   async createStory(input: CreateStoryInput): Promise<Story> {

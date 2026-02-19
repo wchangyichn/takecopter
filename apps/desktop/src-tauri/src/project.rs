@@ -149,7 +149,7 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
   .map_err(|error| format!("初始化数据库失败: {error}"))?;
 
   let mut statement = conn
-    .prepare("SELECT value FROM meta WHERE key='schema_version'")
+    .prepare("SELECT CAST(value AS INTEGER) FROM meta WHERE key='schema_version'")
     .map_err(|error| format!("读取数据库版本失败: {error}"))?;
   let mut rows = statement.query([]).map_err(|error| format!("读取数据库版本失败: {error}"))?;
 
@@ -158,14 +158,14 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
     if version < CURRENT_SCHEMA_VERSION {
       conn.execute(
         "UPDATE meta SET value=?1 WHERE key='schema_version'",
-        params![CURRENT_SCHEMA_VERSION.to_string()],
+        params![CURRENT_SCHEMA_VERSION],
       )
       .map_err(|error| format!("升级数据库版本失败: {error}"))?;
     }
   } else {
     conn.execute(
       "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
-      params![CURRENT_SCHEMA_VERSION.to_string()],
+      params![CURRENT_SCHEMA_VERSION],
     )
     .map_err(|error| format!("写入数据库版本失败: {error}"))?;
   }

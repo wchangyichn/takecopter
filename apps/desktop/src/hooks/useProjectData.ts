@@ -20,6 +20,30 @@ interface UseProjectDataResult {
 
 const storySuffix = ['晨雾', '夜航', '折光', '回潮', '暗线', '远火', '风眼'];
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return '未知错误';
+    }
+  }
+
+  return '未知错误';
+}
+
 export function useProjectData(): UseProjectDataResult {
   const repository: ProjectDataRepository = isTauriRuntime() ? tauriRepository : projectRepository;
   const [projectData, setProjectData] = useState<ProjectData>({ stories: [], workspaces: {} });
@@ -42,7 +66,7 @@ export function useProjectData(): UseProjectDataResult {
         if (isCancelled) {
           return;
         }
-        const details = error instanceof Error ? error.message : '未知错误';
+        const details = getErrorMessage(error);
         console.error('项目启动加载失败', error);
         setBootError(`本地数据加载失败：${details}`);
       } finally {
