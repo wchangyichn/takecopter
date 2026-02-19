@@ -1,6 +1,12 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { ProjectData, SettingCard, Story, TreeNode } from '../types';
-import type { CreateStoryInput, ExportedProjectData, ProjectDataRepository } from './repositoryTypes';
+import type {
+  BootstrapState,
+  CreateStoryInput,
+  ExportedProjectData,
+  ExportedStoryData,
+  ProjectDataRepository,
+} from './repositoryTypes';
 
 interface EnsureProjectResponse {
   projectPath: string;
@@ -57,6 +63,22 @@ function formatUnknownError(error: unknown): string {
 }
 
 class TauriRepository implements ProjectDataRepository {
+  async getBootstrapState(): Promise<BootstrapState> {
+    return invoke<BootstrapState>('get_bootstrap_state');
+  }
+
+  async pickProjectRoot(): Promise<string | null> {
+    return invoke<string | null>('pick_project_root');
+  }
+
+  async initializeProjectRoot(rootPath?: string): Promise<void> {
+    await invoke('initialize_project_root', { rootPath });
+  }
+
+  async openProjectRoot(rootPath: string): Promise<void> {
+    await invoke('open_project_root', { rootPath });
+  }
+
   async load(): Promise<ProjectData> {
     try {
       const response = await invoke<EnsureProjectResponse>('ensure_project');
@@ -85,6 +107,18 @@ class TauriRepository implements ProjectDataRepository {
 
   async importProject(payload: ExportedProjectData): Promise<void> {
     await invoke('import_project', { payload });
+  }
+
+  async importStory(payload: ExportedStoryData): Promise<void> {
+    await invoke('import_story', { payload });
+  }
+
+  async openStoryFolder(storyId: string): Promise<void> {
+    await invoke('open_story_folder', { storyId });
+  }
+
+  async openStoryDatabase(storyId: string): Promise<void> {
+    await invoke('open_story_database', { storyId });
   }
 }
 

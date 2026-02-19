@@ -9,6 +9,8 @@ interface HomeViewProps {
   onCreateStory: () => void;
   onExportProject: () => void;
   onImportProject: (file: File) => void;
+  onOpenStoryFolder: (id: string) => void;
+  onOpenStoryDatabase: (id: string) => void;
 }
 
 export function HomeView({
@@ -17,6 +19,8 @@ export function HomeView({
   onCreateStory,
   onExportProject,
   onImportProject,
+  onOpenStoryFolder,
+  onOpenStoryDatabase,
 }: HomeViewProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -55,6 +59,8 @@ export function HomeView({
                   onHover={setHoveredCard}
                   onSelect={onStorySelect}
                   formattedDate={formatDate(story.updatedAt)}
+                  onOpenStoryFolder={onOpenStoryFolder}
+                  onOpenStoryDatabase={onOpenStoryDatabase}
                 />
               ))}
             </div>
@@ -153,9 +159,20 @@ interface StoryCardProps {
   onHover: (id: string | null) => void;
   onSelect: (id: string) => void;
   formattedDate: string;
+  onOpenStoryFolder: (id: string) => void;
+  onOpenStoryDatabase: (id: string) => void;
 }
 
-function StoryCard({ story, index, isHovered, onHover, onSelect, formattedDate }: StoryCardProps) {
+function StoryCard({
+  story,
+  index,
+  isHovered,
+  onHover,
+  onSelect,
+  formattedDate,
+  onOpenStoryFolder,
+  onOpenStoryDatabase,
+}: StoryCardProps) {
   return (
     <Card
       variant="elevated"
@@ -184,6 +201,26 @@ function StoryCard({ story, index, isHovered, onHover, onSelect, formattedDate }
           <span className={styles.cardDate}>最近编辑：{formattedDate}</span>
           {isHovered && (
             <div className={styles.cardActions}>
+              <button
+                className={styles.cardAction}
+                aria-label="打开故事文件夹"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenStoryFolder(story.id);
+                }}
+              >
+                📁
+              </button>
+              <button
+                className={styles.cardAction}
+                aria-label="打开故事数据库"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenStoryDatabase(story.id);
+                }}
+              >
+                🗄️
+              </button>
               <button className={styles.cardAction} aria-label="进入故事页面" onClick={(e) => { e.stopPropagation(); onSelect(story.id); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="5" y1="12" x2="19" y2="12" />

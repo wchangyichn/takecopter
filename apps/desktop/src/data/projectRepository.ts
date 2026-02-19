@@ -1,12 +1,18 @@
 import initSqlJs, { type Database } from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { mockSettingCards, mockStories, mockTreeData } from './mockData';
 import { createDbBinaryStorage } from './dbStorage';
 import type { ProjectData, SettingCard, Story, TreeNode } from '../types';
-import type { CreateStoryInput, ExportedProjectData, ProjectDataRepository } from './repositoryTypes';
+import type {
+  BootstrapState,
+  CreateStoryInput,
+  ExportedProjectData,
+  ExportedStoryData,
+  ProjectDataRepository,
+} from './repositoryTypes';
 
 const DB_STORAGE_KEY = 'takecopter.desktop.sqlite.v1';
 const LEGACY_STORAGE_KEY = 'takecopter.desktop.project.v1';
+const PROJECT_ROOT_KEY = 'takecopter.desktop.project-root.v1';
 const CURRENT_SCHEMA_VERSION = 1;
 
 interface LegacySerializedStory {
@@ -33,26 +39,6 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function defaultWorkspace() {
-  return {
-    settings: clone(mockSettingCards),
-    tree: clone(mockTreeData),
-  };
-}
-
-function defaultProjectData(): ProjectData {
-  const workspaces: ProjectData['workspaces'] = {};
-
-  for (const story of mockStories) {
-    workspaces[story.id] = defaultWorkspace();
-  }
-
-  return {
-    stories: clone(mockStories),
-    workspaces,
-  };
-}
-
 function normalizeProjectData(data: ProjectDataDateLike): ProjectData {
   return {
     stories: data.stories.map((story, index) => {
@@ -69,6 +55,17 @@ function normalizeProjectData(data: ProjectDataDateLike): ProjectData {
       };
     }),
     workspaces: data.workspaces ?? {},
+  };
+}
+
+function normalizeStoryPayload(payload: ExportedStoryData): { story: Story; workspace: ProjectData['workspaces'][string] } {
+  const normalized = normalizeProjectData({ stories: [payload.story], workspaces: { [payload.story.id]: payload.workspace } });
+  const story = normalized.stories[0];
+  const workspace = normalized.workspaces[story.id] ?? { settings: [], tree: [] };
+
+  return {
+    story,
+    workspace,
   };
 }
 
@@ -161,7 +158,48 @@ export class ProjectRepository implements ProjectDataRepository {
   private dbPromise: Promise<Database> | null = null;
   private readonly storage = createDbBinaryStorage(DB_STORAGE_KEY);
 
+  async getBootstrapState(): Promise<BootstrapState> {
+    const activeRootPath = window.localStorage.getItem(PROJECT_ROOT_KEY);
+    return {
+      needsSetup: !activeRootPath,
+      defaultRootPath: 'browser://takecopter/default-project',
+      activeRootPath,
+    };
+  }
+
+  async initializeProjectRoot(rootPath?: string): Promise<void> {
+    const nextRoot = rootPath?.trim() || 'browser://takecopter/default-project';
+    window.localStorage.setItem(PROJECT_ROOT_KEY, nextRoot);
+  }
+
+  async pickProjectRoot(): Promise<string | null> {
+    return null;
+  }
+
+  async openProjectRoot(rootPath: string): Promise<void> {
+    const nextRoot = rootPath.trim();
+    if (!nextRoot) {
+      throw new Error('项目路径不能为空');
+    }
+    window.localStorage.setItem(PROJECT_ROOT_KEY, nextRoot);
+  }
+
+  async openStoryFolder(storyId: string): Promise<void> {
+    void storyId;
+    throw new Error('Web 端不支持直接打开本地文件夹，请在桌面端使用该功能');
+  }
+
+  async openStoryDatabase(storyId: string): Promise<void> {
+    void storyId;
+    throw new Error('Web 端不支持直接打开数据库文件，请在桌面端使用该功能');
+  }
+
   private async getDb(): Promise<Database> {
+    const bootstrap = await this.getBootstrapState();
+    if (bootstrap.needsSetup) {
+      throw new Error('请先创建项目目录或打开已有项目');
+    }
+
     if (!this.dbPromise) {
       this.dbPromise = this.initializeDb();
     }
@@ -241,8 +279,11 @@ export class ProjectRepository implements ProjectDataRepository {
     }
 
     const legacy = parseLegacyData(window.localStorage.getItem(LEGACY_STORAGE_KEY));
-    const source = legacy ?? defaultProjectData();
-    this.replaceAll(db, source);
+    if (!legacy) {
+      return false;
+    }
+
+    this.replaceAll(db, legacy);
 
     if (legacy) {
       window.localStorage.removeItem(LEGACY_STORAGE_KEY);
@@ -362,6 +403,37 @@ export class ProjectRepository implements ProjectDataRepository {
 
     const db = await this.getDb();
     this.replaceAll(db, normalizeProjectData(payload.data));
+    await this.persist(db);
+  }
+
+  async importStory(payload: ExportedStoryData): Promise<void> {
+    if (payload.app !== 'takecopter') {
+      throw new Error('无效的故事文件来源');
+    }
+
+    if (payload.schemaVersion > CURRENT_SCHEMA_VERSION) {
+      throw new Error('故事版本过新，请升级应用后再导入');
+    }
+
+    const db = await this.getDb();
+    const { story, workspace } = normalizeStoryPayload(payload);
+
+    db.exec('BEGIN');
+    try {
+      db.exec(`DELETE FROM workspaces WHERE story_id = ${sqlText(story.id)}`);
+      db.exec(`DELETE FROM stories WHERE id = ${sqlText(story.id)}`);
+      db.exec(
+        `INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (${sqlText(story.id)}, ${sqlText(story.title)}, ${sqlText(story.description)}, ${sqlText(story.updatedAt.toISOString())}, ${sqlText(story.coverColor)})`
+      );
+      db.exec(
+        `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))})`
+      );
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+
     await this.persist(db);
   }
 }

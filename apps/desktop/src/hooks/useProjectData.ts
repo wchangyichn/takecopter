@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { projectRepository } from '../data/projectRepository';
 import { tauriRepository, isTauriRuntime } from '../data/tauriRepository';
 import type { ProjectData, SaveStatus, SettingCard, Story, TreeNode } from '../types';
-import type { ExportedProjectData, ProjectDataRepository } from '../data/repositoryTypes';
+import type { BootstrapState, ExportedProjectData, ExportedStoryData, ProjectDataRepository } from '../data/repositoryTypes';
 
 interface UseProjectDataResult {
   stories: Story[];
@@ -13,6 +13,13 @@ interface UseProjectDataResult {
   saveTreeData: (storyId: string, tree: TreeNode[]) => Promise<void>;
   exportProjectFile: () => Promise<void>;
   importProjectFile: (file: File) => Promise<void>;
+  openStoryFolder: (storyId: string) => Promise<void>;
+  openStoryDatabase: (storyId: string) => Promise<void>;
+  setupState: BootstrapState | null;
+  pickProjectPath: () => Promise<string | null>;
+  setupProjectWithDefaultPath: () => Promise<void>;
+  setupProjectAtPath: (path: string) => Promise<void>;
+  openProjectAtPath: (path: string) => Promise<void>;
   saveStatus: SaveStatus;
   isReady: boolean;
   bootError: string | null;
@@ -47,15 +54,31 @@ function getErrorMessage(error: unknown): string {
 export function useProjectData(): UseProjectDataResult {
   const repository: ProjectDataRepository = isTauriRuntime() ? tauriRepository : projectRepository;
   const [projectData, setProjectData] = useState<ProjectData>({ stories: [], workspaces: {} });
+  const [setupState, setSetupState] = useState<BootstrapState | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isReady, setIsReady] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+
+  const fetchSetupState = useCallback(async () => {
+    const next = await repository.getBootstrapState();
+    setSetupState(next);
+    return next;
+  }, [repository]);
 
   useEffect(() => {
     let isCancelled = false;
 
     const bootstrap = async () => {
       try {
+        const state = await fetchSetupState();
+        if (state.needsSetup) {
+          if (!isCancelled) {
+            setProjectData({ stories: [], workspaces: {} });
+            setBootError(null);
+          }
+          return;
+        }
+
         const loaded = await repository.load();
         if (isCancelled) {
           return;
@@ -81,7 +104,7 @@ export function useProjectData(): UseProjectDataResult {
     return () => {
       isCancelled = true;
     };
-  }, [repository]);
+  }, [fetchSetupState, repository]);
 
   const reload = useCallback(async () => {
     const latest = await repository.load();
@@ -151,12 +174,64 @@ export function useProjectData(): UseProjectDataResult {
   const importProjectFile = useCallback(
     async (file: File) => {
       const content = await file.text();
-      const parsed = JSON.parse(content) as ExportedProjectData;
+      const parsed = JSON.parse(content) as ExportedProjectData | ExportedStoryData;
       await runMutation(async () => {
-        await repository.importProject(parsed);
+        if ('data' in parsed) {
+          await repository.importProject(parsed);
+        } else {
+          await repository.importStory(parsed);
+        }
       });
     },
     [repository, runMutation]
+  );
+
+  const setupProjectWithDefaultPath = useCallback(async () => {
+    await repository.initializeProjectRoot();
+    await fetchSetupState();
+    const loaded = await repository.load();
+    setProjectData(loaded);
+    setBootError(null);
+  }, [fetchSetupState, repository]);
+
+  const setupProjectAtPath = useCallback(
+    async (path: string) => {
+      await repository.initializeProjectRoot(path);
+      await fetchSetupState();
+      const loaded = await repository.load();
+      setProjectData(loaded);
+      setBootError(null);
+    },
+    [fetchSetupState, repository]
+  );
+
+  const openProjectAtPath = useCallback(
+    async (path: string) => {
+      await repository.openProjectRoot(path);
+      await fetchSetupState();
+      const loaded = await repository.load();
+      setProjectData(loaded);
+      setBootError(null);
+    },
+    [fetchSetupState, repository]
+  );
+
+  const pickProjectPath = useCallback(async () => {
+    return repository.pickProjectRoot();
+  }, [repository]);
+
+  const openStoryFolder = useCallback(
+    async (storyId: string) => {
+      await repository.openStoryFolder(storyId);
+    },
+    [repository]
+  );
+
+  const openStoryDatabase = useCallback(
+    async (storyId: string) => {
+      await repository.openStoryDatabase(storyId);
+    },
+    [repository]
   );
 
   const workspaceCardsMap = useMemo(() => {
@@ -204,6 +279,13 @@ export function useProjectData(): UseProjectDataResult {
     saveTreeData,
     exportProjectFile,
     importProjectFile,
+    openStoryFolder,
+    openStoryDatabase,
+    setupState,
+    pickProjectPath,
+    setupProjectWithDefaultPath,
+    setupProjectAtPath,
+    openProjectAtPath,
     saveStatus,
     isReady,
     bootError,

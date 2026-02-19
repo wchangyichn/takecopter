@@ -1,14 +1,13 @@
 use std::{
-  collections::HashMap,
   fs,
   path::{Path, PathBuf},
+  process::Command,
   sync::Mutex,
 };
 
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
@@ -16,7 +15,7 @@ const CURRENT_SCHEMA_VERSION: i64 = 1;
 
 #[derive(Default)]
 pub struct ProjectState {
-  project_dir: Mutex<Option<PathBuf>>,
+  project_root: Mutex<Option<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,15 +31,15 @@ pub struct Story {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Workspace {
-  pub settings: Vec<Value>,
-  pub tree: Vec<Value>,
+  pub settings: Vec<serde_json::Value>,
+  pub tree: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectData {
   pub stories: Vec<Story>,
-  pub workspaces: HashMap<String, Workspace>,
+  pub workspaces: std::collections::HashMap<String, Workspace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +47,14 @@ pub struct ProjectData {
 pub struct EnsureProjectResponse {
   pub project_path: String,
   pub data: ProjectData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapState {
+  pub needs_setup: bool,
+  pub default_root_path: String,
+  pub active_root_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,331 +73,336 @@ pub struct ExportedProjectData {
   pub data: ProjectData,
 }
 
-fn resolve_project_dir(app: &AppHandle, state: &ProjectState) -> Result<PathBuf, String> {
-  if let Ok(guard) = state.project_dir.lock() {
-    if let Some(path) = guard.as_ref() {
-      return Ok(path.clone());
-    }
-  }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedStoryData {
+  pub app: String,
+  pub schema_version: i64,
+  pub exported_at: String,
+  pub story: Story,
+  pub workspace: Workspace,
+}
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectManifest {
+  app: String,
+  schema_version: i64,
+  created_at: String,
+  stories: Vec<Story>,
+}
+
+fn now_rfc3339() -> String {
+  Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+fn default_root_path(app: &AppHandle) -> Result<PathBuf, String> {
   let app_data = app
     .path()
     .app_data_dir()
     .map_err(|error| format!("无法读取应用目录: {error}"))?;
+  Ok(app_data.join("takecopter").join("projects").join("default.takecopter"))
+}
 
-  let project_dir = app_data.join("takecopter").join("default.takecopter");
-  fs::create_dir_all(project_dir.join("assets").join("images"))
-    .map_err(|error| format!("无法创建项目目录: {error}"))?;
-  fs::create_dir_all(project_dir.join("assets").join("videos"))
-    .map_err(|error| format!("无法创建项目目录: {error}"))?;
-  fs::create_dir_all(project_dir.join("exports")).map_err(|error| format!("无法创建项目目录: {error}"))?;
+fn selection_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+  let app_data = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("无法读取应用目录: {error}"))?;
+  Ok(app_data.join("takecopter").join("active_root_path.txt"))
+}
 
-  let lock_path = project_dir.join(".lock");
-  let lock_content = format!(
-    "pid={}\nupdated_at={}\n",
-    std::process::id(),
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-  );
+fn read_selected_root(app: &AppHandle) -> Result<Option<PathBuf>, String> {
+  let path = selection_file_path(app)?;
+  if !path.exists() {
+    return Ok(None);
+  }
+
+  let raw = fs::read_to_string(&path).map_err(|error| format!("读取项目选择记录失败: {error}"))?;
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+
+  Ok(Some(PathBuf::from(trimmed)))
+}
+
+fn write_selected_root(app: &AppHandle, root: &Path) -> Result<(), String> {
+  let path = selection_file_path(app)?;
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent).map_err(|error| format!("写入项目选择记录失败: {error}"))?;
+  }
+  fs::write(path, root.to_string_lossy().to_string()).map_err(|error| format!("写入项目选择记录失败: {error}"))
+}
+
+fn project_manifest_path(root: &Path) -> PathBuf {
+  root.join("project.json")
+}
+
+fn stories_root(root: &Path) -> PathBuf {
+  root.join("stories")
+}
+
+fn story_root(root: &Path, story_id: &str) -> PathBuf {
+  stories_root(root).join(story_id)
+}
+
+fn story_db_path(root: &Path, story_id: &str) -> PathBuf {
+  story_root(root, story_id).join("story.db")
+}
+
+fn ensure_root_layout(root: &Path) -> Result<(), String> {
+  fs::create_dir_all(stories_root(root)).map_err(|error| format!("无法创建项目目录: {error}"))?;
+  fs::create_dir_all(root.join("exports")).map_err(|error| format!("无法创建项目目录: {error}"))?;
+
+  let lock_path = root.join(".lock");
+  let lock_content = format!("pid={}\nupdated_at={}\n", std::process::id(), now_rfc3339());
   fs::write(lock_path, lock_content).map_err(|error| format!("无法写入项目锁文件: {error}"))?;
 
-  let metadata_path = project_dir.join("project.json");
-  if !metadata_path.exists() {
-    let metadata = serde_json::json!({
-      "app": "takecopter",
-      "schemaVersion": CURRENT_SCHEMA_VERSION,
-      "createdAt": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-    });
-    fs::write(metadata_path, serde_json::to_vec_pretty(&metadata).map_err(|error| error.to_string())?)
-      .map_err(|error| format!("无法写入项目元信息: {error}"))?;
-  }
-
-  if let Ok(mut guard) = state.project_dir.lock() {
-    *guard = Some(project_dir.clone());
-  }
-
-  Ok(project_dir)
-}
-
-fn db_path(project_dir: &Path) -> PathBuf {
-  project_dir.join("story.db")
-}
-
-fn open_db(project_dir: &Path) -> Result<Connection, String> {
-  let connection = Connection::open(db_path(project_dir)).map_err(|error| format!("数据库打开失败: {error}"))?;
-  initialize_schema(&connection)?;
-  seed_if_empty(&connection)?;
-  Ok(connection)
-}
-
-fn initialize_schema(conn: &Connection) -> Result<(), String> {
-  conn.execute_batch(
-    "
-      CREATE TABLE IF NOT EXISTS meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS stories (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        cover_color TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS workspaces (
-        story_id TEXT PRIMARY KEY,
-        settings_json TEXT NOT NULL,
-        tree_json TEXT NOT NULL,
-        FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
-      );
-    ",
-  )
-  .map_err(|error| format!("初始化数据库失败: {error}"))?;
-
-  let mut statement = conn
-    .prepare("SELECT CAST(value AS INTEGER) FROM meta WHERE key='schema_version'")
-    .map_err(|error| format!("读取数据库版本失败: {error}"))?;
-  let mut rows = statement.query([]).map_err(|error| format!("读取数据库版本失败: {error}"))?;
-
-  if let Some(row) = rows.next().map_err(|error| format!("读取数据库版本失败: {error}"))? {
-    let version: i64 = row.get(0).map_err(|error| format!("读取数据库版本失败: {error}"))?;
-    if version < CURRENT_SCHEMA_VERSION {
-      conn.execute(
-        "UPDATE meta SET value=?1 WHERE key='schema_version'",
-        params![CURRENT_SCHEMA_VERSION],
-      )
-      .map_err(|error| format!("升级数据库版本失败: {error}"))?;
-    }
-  } else {
-    conn.execute(
-      "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
-      params![CURRENT_SCHEMA_VERSION],
-    )
-    .map_err(|error| format!("写入数据库版本失败: {error}"))?;
+  let manifest_path = project_manifest_path(root);
+  if !manifest_path.exists() {
+    let manifest = ProjectManifest {
+      app: "takecopter".to_string(),
+      schema_version: CURRENT_SCHEMA_VERSION,
+      created_at: now_rfc3339(),
+      stories: vec![],
+    };
+    let raw = serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?;
+    fs::write(manifest_path, raw).map_err(|error| format!("无法写入项目元信息: {error}"))?;
   }
 
   Ok(())
 }
 
-fn seed_if_empty(conn: &Connection) -> Result<(), String> {
-  let total: i64 = conn
-    .query_row("SELECT COUNT(*) FROM stories", [], |row| row.get(0))
-    .map_err(|error| format!("读取数据库失败: {error}"))?;
-
-  if total > 0 {
-    return Ok(());
+fn read_manifest(root: &Path) -> Result<ProjectManifest, String> {
+  let path = project_manifest_path(root);
+  let raw = fs::read_to_string(path).map_err(|error| format!("读取项目元信息失败: {error}"))?;
+  let manifest = serde_json::from_str::<ProjectManifest>(&raw).map_err(|error| format!("解析项目元信息失败: {error}"))?;
+  if manifest.app != "takecopter" {
+    return Err("无效的项目目录来源".to_string());
   }
-
-  let seeds = default_project_data();
-  replace_all(conn, &seeds)
+  Ok(manifest)
 }
 
-fn default_project_data() -> ProjectData {
-  let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-  let stories = vec![
-    Story {
-      id: "seed-1".to_string(),
-      title: "星港迷雾".to_string(),
-      description: "一枚古代星图碎片在港口重现，引发多方势力争夺。".to_string(),
-      updated_at: now.clone(),
-      cover_color: "var(--coral-400)".to_string(),
-    },
-    Story {
-      id: "seed-2".to_string(),
-      title: "回声之城".to_string(),
-      description: "一座会复述未来的城市，让每个选择都变得危险。".to_string(),
-      updated_at: now,
-      cover_color: "var(--violet-400)".to_string(),
-    },
-  ];
+fn write_manifest(root: &Path, manifest: &ProjectManifest) -> Result<(), String> {
+  let raw = serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?;
+  fs::write(project_manifest_path(root), raw).map_err(|error| format!("写入项目元信息失败: {error}"))
+}
 
-  let settings_json = serde_json::json!([
-    {
-      "id": "c1",
-      "title": "林知夏",
-      "type": "character",
-      "summary": "主角，考古修复师，曾失去一段关键记忆",
-      "color": "var(--coral-400)",
-      "position": { "x": 200, "y": 150 },
-      "relations": [{ "targetId": "c2", "type": "师徒" }]
-    },
-    {
-      "id": "c2",
-      "title": "沈舟教授",
-      "type": "character",
-      "summary": "文物学者，对古代航海文明有深度研究",
-      "color": "var(--violet-400)",
-      "position": { "x": 420, "y": 110 },
-      "relations": [{ "targetId": "l1", "type": "任职于" }]
-    },
-    {
-      "id": "l1",
-      "title": "东港博物馆",
-      "type": "location",
-      "summary": "故事主场景，存放关键星图碎片",
-      "color": "var(--teal-400)",
-      "position": { "x": 360, "y": 290 },
-      "relations": []
-    }
-  ]);
+fn update_story_metadata(manifest: &mut ProjectManifest, story: Story) {
+  if let Some(index) = manifest.stories.iter().position(|item| item.id == story.id) {
+    manifest.stories[index] = story;
+  } else {
+    manifest.stories.push(story);
+  }
+}
 
-  let tree_json = serde_json::json!([
-    {
-      "id": "ep1",
-      "type": "ep",
-      "title": "第 1 集：碎片现身",
-      "children": [
-        {
-          "id": "sc1",
-          "type": "scene",
-          "title": "场景 1：博物馆夜巡",
-          "children": [
-            {
-              "id": "sh1",
-              "type": "shot",
-              "title": "镜头 1：大厅环摇",
-              "children": [
-                { "id": "t1", "type": "take", "title": "拍次 1", "children": [], "isSelected": true },
-                { "id": "t2", "type": "take", "title": "拍次 2", "children": [] }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]);
+fn open_story_db(path: &Path) -> Result<Connection, String> {
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent).map_err(|error| format!("无法创建故事目录: {error}"))?;
+    fs::create_dir_all(parent.join("assets").join("images")).map_err(|error| format!("无法创建故事目录: {error}"))?;
+    fs::create_dir_all(parent.join("assets").join("videos")).map_err(|error| format!("无法创建故事目录: {error}"))?;
+  }
 
-  let mut workspaces = HashMap::new();
-  workspaces.insert(
-    "seed-1".to_string(),
-    Workspace {
-      settings: settings_json.as_array().cloned().unwrap_or_default(),
-      tree: tree_json.as_array().cloned().unwrap_or_default(),
-    },
-  );
-  workspaces.insert(
-    "seed-2".to_string(),
-    Workspace {
+  let conn = Connection::open(path).map_err(|error| format!("故事数据库打开失败: {error}"))?;
+  conn
+    .execute_batch(
+      "
+      CREATE TABLE IF NOT EXISTS workspace (
+        id INTEGER PRIMARY KEY,
+        settings_json TEXT NOT NULL,
+        tree_json TEXT NOT NULL
+      );
+      ",
+    )
+    .map_err(|error| format!("初始化故事数据库失败: {error}"))?;
+
+  Ok(conn)
+}
+
+fn read_workspace(path: &Path) -> Result<Workspace, String> {
+  if !path.exists() {
+    return Ok(Workspace {
       settings: vec![],
       tree: vec![],
-    },
-  );
+    });
+  }
 
-  ProjectData { stories, workspaces }
-}
+  let conn = open_story_db(path)?;
+  let row = conn
+    .query_row("SELECT settings_json, tree_json FROM workspace WHERE id = 1", [], |row| {
+      let settings_json: String = row.get(0)?;
+      let tree_json: String = row.get(1)?;
+      Ok((settings_json, tree_json))
+    })
+    .optional()
+    .map_err(|error| format!("读取故事工作区失败: {error}"))?;
 
-fn replace_all(conn: &Connection, data: &ProjectData) -> Result<(), String> {
-  conn.execute_batch("BEGIN;")
-    .map_err(|error| format!("开启事务失败: {error}"))?;
-
-  let result = (|| -> Result<(), String> {
-    conn.execute("DELETE FROM workspaces", [])
-      .map_err(|error| format!("清理工作区失败: {error}"))?;
-    conn.execute("DELETE FROM stories", [])
-      .map_err(|error| format!("清理故事失败: {error}"))?;
-
-    for story in &data.stories {
-      conn.execute(
-        "INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![story.id, story.title, story.description, story.updated_at, story.cover_color],
-      )
-      .map_err(|error| format!("写入故事失败: {error}"))?;
-    }
-
-    for story in &data.stories {
-      let workspace = data.workspaces.get(&story.id).cloned().unwrap_or(Workspace {
-        settings: vec![],
-        tree: vec![],
-      });
-      let settings_json = serde_json::to_string(&workspace.settings).map_err(|error| error.to_string())?;
-      let tree_json = serde_json::to_string(&workspace.tree).map_err(|error| error.to_string())?;
-
-      conn.execute(
-        "INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (?1, ?2, ?3)",
-        params![story.id, settings_json, tree_json],
-      )
-      .map_err(|error| format!("写入工作区失败: {error}"))?;
-    }
-
-    Ok(())
-  })();
-
-  match result {
-    Ok(()) => conn
-      .execute_batch("COMMIT;")
-      .map_err(|error| format!("提交事务失败: {error}")),
-    Err(error) => {
-      let _ = conn.execute_batch("ROLLBACK;");
-      Err(error)
-    }
+  if let Some((settings_json, tree_json)) = row {
+    let settings = serde_json::from_str::<Vec<serde_json::Value>>(&settings_json)
+      .map_err(|error| format!("解析故事设定失败: {error}"))?;
+    let tree = serde_json::from_str::<Vec<serde_json::Value>>(&tree_json).map_err(|error| format!("解析故事树结构失败: {error}"))?;
+    Ok(Workspace { settings, tree })
+  } else {
+    Ok(Workspace {
+      settings: vec![],
+      tree: vec![],
+    })
   }
 }
 
-fn load_project_data(conn: &Connection) -> Result<ProjectData, String> {
-  let mut story_stmt = conn
-    .prepare("SELECT id, title, description, updated_at, cover_color FROM stories ORDER BY updated_at DESC")
-    .map_err(|error| format!("读取故事失败: {error}"))?;
+fn write_workspace(path: &Path, workspace: &Workspace) -> Result<(), String> {
+  let conn = open_story_db(path)?;
+  let settings_json = serde_json::to_string(&workspace.settings).map_err(|error| error.to_string())?;
+  let tree_json = serde_json::to_string(&workspace.tree).map_err(|error| error.to_string())?;
 
-  let stories_iter = story_stmt
-    .query_map([], |row| {
-      Ok(Story {
-        id: row.get(0)?,
-        title: row.get(1)?,
-        description: row.get(2)?,
-        updated_at: row.get(3)?,
-        cover_color: row.get(4)?,
-      })
-    })
-    .map_err(|error| format!("读取故事失败: {error}"))?;
+  conn
+    .execute(
+      "INSERT INTO workspace (id, settings_json, tree_json) VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, tree_json = excluded.tree_json",
+      params![settings_json, tree_json],
+    )
+    .map_err(|error| format!("写入故事工作区失败: {error}"))?;
+  Ok(())
+}
 
-  let mut stories = Vec::new();
-  for story in stories_iter {
-    stories.push(story.map_err(|error| format!("读取故事失败: {error}"))?);
+fn load_project_data(root: &Path) -> Result<ProjectData, String> {
+  let mut manifest = read_manifest(root)?;
+  manifest
+    .stories
+    .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+
+  let mut workspaces = std::collections::HashMap::new();
+  for story in &manifest.stories {
+    let workspace = read_workspace(&story_db_path(root, &story.id))?;
+    workspaces.insert(story.id.clone(), workspace);
   }
 
-  let mut workspace_stmt = conn
-    .prepare("SELECT story_id, settings_json, tree_json FROM workspaces")
-    .map_err(|error| format!("读取工作区失败: {error}"))?;
+  Ok(ProjectData {
+    stories: manifest.stories,
+    workspaces,
+  })
+}
 
-  let workspace_iter = workspace_stmt
-    .query_map([], |row| {
-      let story_id: String = row.get(0)?;
-      let settings_json: String = row.get(1)?;
-      let tree_json: String = row.get(2)?;
-      Ok((story_id, settings_json, tree_json))
-    })
-    .map_err(|error| format!("读取工作区失败: {error}"))?;
-
-  let mut workspaces = HashMap::new();
-  for row in workspace_iter {
-    let (story_id, settings_json, tree_json) = row.map_err(|error| format!("读取工作区失败: {error}"))?;
-    let settings: Vec<Value> = serde_json::from_str(&settings_json).map_err(|error| format!("解析设定失败: {error}"))?;
-    let tree: Vec<Value> = serde_json::from_str(&tree_json).map_err(|error| format!("解析树结构失败: {error}"))?;
-    workspaces.insert(story_id, Workspace { settings, tree });
+fn resolve_state_root(app: &AppHandle, state: &ProjectState) -> Result<Option<PathBuf>, String> {
+  if let Ok(guard) = state.project_root.lock() {
+    if let Some(path) = guard.as_ref() {
+      return Ok(Some(path.clone()));
+    }
   }
 
-  Ok(ProjectData { stories, workspaces })
+  read_selected_root(app)
+}
+
+fn set_active_root(app: &AppHandle, state: &ProjectState, root: &Path) -> Result<(), String> {
+  if let Ok(mut guard) = state.project_root.lock() {
+    *guard = Some(root.to_path_buf());
+  }
+  write_selected_root(app, root)
+}
+
+fn require_active_root(app: &AppHandle, state: &ProjectState) -> Result<PathBuf, String> {
+  resolve_state_root(app, state)?.ok_or_else(|| "请先创建项目目录或打开已有项目".to_string())
+}
+
+fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  let mut cmd = {
+    let mut c = Command::new("open");
+    c.arg(path);
+    c
+  };
+
+  #[cfg(target_os = "windows")]
+  let mut cmd = {
+    let mut c = Command::new("explorer");
+    c.arg(path);
+    c
+  };
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  let mut cmd = {
+    let mut c = Command::new("xdg-open");
+    c.arg(path);
+    c
+  };
+
+  cmd.status()
+    .map_err(|error| format!("打开路径失败: {error}"))
+    .and_then(|status| if status.success() { Ok(()) } else { Err("打开路径失败".to_string()) })
+}
+
+#[tauri::command]
+pub fn get_bootstrap_state(app: AppHandle, state: State<ProjectState>) -> Result<BootstrapState, String> {
+  let default_root = default_root_path(&app)?;
+  let active_root = resolve_state_root(&app, &state)?;
+
+  Ok(BootstrapState {
+    needs_setup: active_root.is_none(),
+    default_root_path: default_root.to_string_lossy().to_string(),
+    active_root_path: active_root.map(|item| item.to_string_lossy().to_string()),
+  })
+}
+
+#[tauri::command]
+pub fn pick_project_root() -> Result<Option<String>, String> {
+  let selected = rfd::FileDialog::new()
+    .set_title("选择故事项目目录")
+    .pick_folder();
+  Ok(selected.map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+pub fn initialize_project_root(app: AppHandle, state: State<ProjectState>, root_path: Option<String>) -> Result<(), String> {
+  let target = if let Some(path) = root_path {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+      default_root_path(&app)?
+    } else {
+      PathBuf::from(trimmed)
+    }
+  } else {
+    default_root_path(&app)?
+  };
+
+  ensure_root_layout(&target)?;
+  set_active_root(&app, &state, &target)
+}
+
+#[tauri::command]
+pub fn open_project_root(app: AppHandle, state: State<ProjectState>, root_path: String) -> Result<(), String> {
+  let target = PathBuf::from(root_path.trim());
+  if !target.exists() {
+    return Err("项目目录不存在".to_string());
+  }
+
+  if !project_manifest_path(&target).exists() {
+    return Err("未找到 project.json，请先创建项目目录或选择有效项目目录".to_string());
+  }
+
+  ensure_root_layout(&target)?;
+  let _ = read_manifest(&target)?;
+  set_active_root(&app, &state, &target)
 }
 
 #[tauri::command]
 pub fn ensure_project(app: AppHandle, state: State<ProjectState>) -> Result<EnsureProjectResponse, String> {
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
-  let data = load_project_data(&conn)?;
+  let root = require_active_root(&app, &state)?;
+  ensure_root_layout(&root)?;
+  let data = load_project_data(&root)?;
   Ok(EnsureProjectResponse {
-    project_path: project_dir.to_string_lossy().to_string(),
+    project_path: root.to_string_lossy().to_string(),
     data,
   })
 }
 
 #[tauri::command]
 pub fn create_story(app: AppHandle, state: State<ProjectState>, input: CreateStoryInput) -> Result<Story, String> {
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
+  let root = require_active_root(&app, &state)?;
+  ensure_root_layout(&root)?;
+  let mut manifest = read_manifest(&root)?;
 
   let id = Uuid::new_v4().to_string();
-  let updated_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+  let now = now_rfc3339();
   let colors = [
     "var(--coral-400)",
     "var(--violet-400)",
@@ -399,27 +411,22 @@ pub fn create_story(app: AppHandle, state: State<ProjectState>, input: CreateSto
     "var(--rose-400)",
   ];
   let index = (Utc::now().timestamp_millis().unsigned_abs() as usize) % colors.len();
-  let cover_color = colors[index].to_string();
-
   let story = Story {
     id: id.clone(),
     title: input.title,
     description: input.description,
-    updated_at: updated_at.clone(),
-    cover_color,
+    updated_at: now,
+    cover_color: colors[index].to_string(),
   };
 
-  conn.execute(
-    "INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (?1, ?2, ?3, ?4, ?5)",
-    params![story.id, story.title, story.description, story.updated_at, story.cover_color],
-  )
-  .map_err(|error| format!("创建故事失败: {error}"))?;
+  let workspace = Workspace {
+    settings: vec![],
+    tree: vec![],
+  };
+  write_workspace(&story_db_path(&root, &story.id), &workspace)?;
 
-  conn.execute(
-    "INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (?1, ?2, ?3)",
-    params![id, "[]", "[]"],
-  )
-  .map_err(|error| format!("创建故事工作区失败: {error}"))?;
+  update_story_metadata(&mut manifest, story.clone());
+  write_manifest(&root, &manifest)?;
 
   Ok(story)
 }
@@ -429,38 +436,23 @@ pub fn update_settings(
   app: AppHandle,
   state: State<ProjectState>,
   story_id: String,
-  settings: Vec<Value>,
+  settings: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
-  let settings_json = serde_json::to_string(&settings).map_err(|error| error.to_string())?;
-  let updated_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+  let root = require_active_root(&app, &state)?;
+  let mut manifest = read_manifest(&root)?;
+  let Some(story) = manifest.stories.iter_mut().find(|item| item.id == story_id) else {
+    return Err("故事不存在".to_string());
+  };
 
-  conn.execute_batch("BEGIN;")
-    .map_err(|error| format!("开启事务失败: {error}"))?;
-  let result = (|| -> Result<(), String> {
-    conn.execute(
-      "UPDATE workspaces SET settings_json=?1 WHERE story_id=?2",
-      params![settings_json, story_id],
-    )
-    .map_err(|error| format!("更新设定失败: {error}"))?;
-    conn.execute(
-      "UPDATE stories SET updated_at=?1 WHERE id=?2",
-      params![updated_at, story_id],
-    )
-    .map_err(|error| format!("更新故事时间失败: {error}"))?;
-    Ok(())
-  })();
+  let current = read_workspace(&story_db_path(&root, &story_id))?;
+  let next = Workspace {
+    settings,
+    tree: current.tree,
+  };
+  write_workspace(&story_db_path(&root, &story_id), &next)?;
 
-  match result {
-    Ok(()) => conn
-      .execute_batch("COMMIT;")
-      .map_err(|error| format!("提交事务失败: {error}")),
-    Err(error) => {
-      let _ = conn.execute_batch("ROLLBACK;");
-      Err(error)
-    }
-  }
+  story.updated_at = now_rfc3339();
+  write_manifest(&root, &manifest)
 }
 
 #[tauri::command]
@@ -468,69 +460,99 @@ pub fn update_tree(
   app: AppHandle,
   state: State<ProjectState>,
   story_id: String,
-  tree: Vec<Value>,
+  tree: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
-  let tree_json = serde_json::to_string(&tree).map_err(|error| error.to_string())?;
-  let updated_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+  let root = require_active_root(&app, &state)?;
+  let mut manifest = read_manifest(&root)?;
+  let Some(story) = manifest.stories.iter_mut().find(|item| item.id == story_id) else {
+    return Err("故事不存在".to_string());
+  };
 
-  conn.execute_batch("BEGIN;")
-    .map_err(|error| format!("开启事务失败: {error}"))?;
-  let result = (|| -> Result<(), String> {
-    conn.execute(
-      "UPDATE workspaces SET tree_json=?1 WHERE story_id=?2",
-      params![tree_json, story_id],
-    )
-    .map_err(|error| format!("更新创作树失败: {error}"))?;
-    conn.execute(
-      "UPDATE stories SET updated_at=?1 WHERE id=?2",
-      params![updated_at, story_id],
-    )
-    .map_err(|error| format!("更新故事时间失败: {error}"))?;
-    Ok(())
-  })();
+  let current = read_workspace(&story_db_path(&root, &story_id))?;
+  let next = Workspace {
+    settings: current.settings,
+    tree,
+  };
+  write_workspace(&story_db_path(&root, &story_id), &next)?;
 
-  match result {
-    Ok(()) => conn
-      .execute_batch("COMMIT;")
-      .map_err(|error| format!("提交事务失败: {error}")),
-    Err(error) => {
-      let _ = conn.execute_batch("ROLLBACK;");
-      Err(error)
-    }
-  }
+  story.updated_at = now_rfc3339();
+  write_manifest(&root, &manifest)
 }
 
 #[tauri::command]
 pub fn export_project(app: AppHandle, state: State<ProjectState>) -> Result<ExportedProjectData, String> {
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
-  let data = load_project_data(&conn)?;
+  let root = require_active_root(&app, &state)?;
+  let data = load_project_data(&root)?;
 
   Ok(ExportedProjectData {
     app: "takecopter".to_string(),
     schema_version: CURRENT_SCHEMA_VERSION,
-    exported_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    exported_at: now_rfc3339(),
     data,
   })
 }
 
 #[tauri::command]
-pub fn import_project(
-  app: AppHandle,
-  state: State<ProjectState>,
-  payload: ExportedProjectData,
-) -> Result<(), String> {
+pub fn import_project(app: AppHandle, state: State<ProjectState>, payload: ExportedProjectData) -> Result<(), String> {
   if payload.app != "takecopter" {
     return Err("无效的项目文件来源".to_string());
   }
-
   if payload.schema_version > CURRENT_SCHEMA_VERSION {
     return Err("项目版本过新，请升级应用后再导入".to_string());
   }
 
-  let project_dir = resolve_project_dir(&app, &state)?;
-  let conn = open_db(&project_dir)?;
-  replace_all(&conn, &payload.data)
+  let root = require_active_root(&app, &state)?;
+  ensure_root_layout(&root)?;
+
+  let mut manifest = read_manifest(&root)?;
+  manifest.stories = payload.data.stories.clone();
+  write_manifest(&root, &manifest)?;
+
+  for story in &payload.data.stories {
+    let workspace = payload.data.workspaces.get(&story.id).cloned().unwrap_or(Workspace {
+      settings: vec![],
+      tree: vec![],
+    });
+    write_workspace(&story_db_path(&root, &story.id), &workspace)?;
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+pub fn import_story(app: AppHandle, state: State<ProjectState>, payload: ExportedStoryData) -> Result<(), String> {
+  if payload.app != "takecopter" {
+    return Err("无效的故事文件来源".to_string());
+  }
+  if payload.schema_version > CURRENT_SCHEMA_VERSION {
+    return Err("故事版本过新，请升级应用后再导入".to_string());
+  }
+
+  let root = require_active_root(&app, &state)?;
+  ensure_root_layout(&root)?;
+
+  let mut manifest = read_manifest(&root)?;
+  update_story_metadata(&mut manifest, payload.story.clone());
+  write_manifest(&root, &manifest)?;
+  write_workspace(&story_db_path(&root, &payload.story.id), &payload.workspace)
+}
+
+#[tauri::command]
+pub fn open_story_folder(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<(), String> {
+  let root = require_active_root(&app, &state)?;
+  let manifest = read_manifest(&root)?;
+  if !manifest.stories.iter().any(|item| item.id == story_id) {
+    return Err("故事不存在".to_string());
+  }
+  open_path_in_file_manager(&story_root(&root, &story_id))
+}
+
+#[tauri::command]
+pub fn open_story_database(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<(), String> {
+  let root = require_active_root(&app, &state)?;
+  let manifest = read_manifest(&root)?;
+  if !manifest.stories.iter().any(|item| item.id == story_id) {
+    return Err("故事不存在".to_string());
+  }
+  open_path_in_file_manager(&story_db_path(&root, &story_id))
 }
