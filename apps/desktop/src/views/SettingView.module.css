@@ -469,6 +469,13 @@
   color: var(--slate-700);
 }
 
+.detailQuickCreateRow {
+  margin-top: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
 .detailInput,
 .detailTextarea {
   width: 100%;
@@ -557,6 +564,112 @@
   margin-top: var(--space-2);
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tagSearchWrap {
+  position: relative;
+}
+
+.tagSearchDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-dropdown);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.tagSearchItem,
+.tagCreateItem {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--slate-700);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tagSearchItem:hover,
+.tagCreateItem:hover {
+  background: var(--slate-50);
+}
+
+.managerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg-overlay);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.managerCard {
+  width: min(560px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.managerHeader h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--slate-800);
+}
+
+.managerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.managerList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.managerListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--slate-50);
+}
+
+.managerTagName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--slate-700);
+}
+
+.managerActions {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
@@ -770,6 +883,10 @@
     background: var(--slate-800);
   }
 
+  .detailQuickCreateRow {
+    align-items: stretch;
+  }
+
   .tagInput {
     border-color: var(--slate-600);
     background: var(--slate-800);
@@ -792,6 +909,35 @@
   .activeTagFilter {
     background: rgba(249, 107, 71, 0.16);
     color: var(--coral-200);
+  }
+
+  .tagSearchDropdown {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+  }
+
+  .tagSearchItem,
+  .tagCreateItem {
+    color: var(--slate-200);
+  }
+
+  .tagSearchItem:hover,
+  .tagCreateItem:hover {
+    background: var(--slate-700);
+  }
+
+  .managerCard {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+  }
+
+  .managerHeader h3,
+  .managerTagName {
+    color: var(--slate-100);
+  }
+
+  .managerListItem {
+    background: var(--slate-700);
   }
 
   .categoryFilter:hover {

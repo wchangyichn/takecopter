@@ -76,9 +76,14 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   const [typeFilter, setTypeFilter] = useState<SettingCard['type'] | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
-  const [newCategory, setNewCategory] = useState('');
-  const [tagNameDraft, setTagNameDraft] = useState('');
-  const [tagColorDraft, setTagColorDraft] = useState('#ff8a6a');
+  const [tagManagerName, setTagManagerName] = useState('');
+  const [tagManagerColor, setTagManagerColor] = useState('#ff8a6a');
+  const [detailNewCategory, setDetailNewCategory] = useState('');
+  const [tagSearchQuery, setTagSearchQuery] = useState('');
+  const [tagSearchOpen, setTagSearchOpen] = useState(false);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [categoryManagerName, setCategoryManagerName] = useState('');
   const [customTags, setCustomTags] = useState<SettingTag[]>([]);
   const [categories, setCategories] = useState<string[]>(() => uniqueCategories(normalizeCards(sourceCards)));
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -110,6 +115,20 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       return matchType && matchCategory && matchTag;
     });
   }, [cards, categoryFilter, tagFilter, typeFilter]);
+
+  const tagSearchCandidates = useMemo(() => {
+    const query = normalizeTagName(tagSearchQuery).toLowerCase();
+    const selectedNames = new Set((selectedCard?.tags ?? []).map((tag) => tag.name));
+    return tagOptions.filter((tag) => {
+      if (selectedNames.has(tag.name)) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return tag.name.toLowerCase().includes(query);
+    });
+  }, [selectedCard?.tags, tagOptions, tagSearchQuery]);
 
   const applyCards = (updater: (prev: EditableCard[]) => EditableCard[]) => {
     setCards((prev) => {
@@ -222,16 +241,13 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   };
 
   const handleAddCategory = () => {
-    const value = newCategory.trim();
+    const value = categoryManagerName.trim();
     if (!value || categories.includes(value)) {
       return;
     }
 
     setCategories((prev) => [...prev, value]);
-    setNewCategory('');
-    if (selectedCard) {
-      handleAssignCategory(value);
-    }
+    setCategoryManagerName('');
   };
 
   const handleUploadImage = async (file: File) => {
@@ -267,8 +283,8 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     });
   };
 
-  const handleCreateTag = () => {
-    const normalized = normalizeTagName(tagNameDraft);
+  const upsertGlobalTag = (name: string, color: string) => {
+    const normalized = normalizeTagName(name);
     if (!normalized) {
       return;
     }
@@ -276,13 +292,21 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     setCustomTags((prev) => {
       const exists = prev.some((tag) => tag.name === normalized);
       if (exists) {
-        return prev.map((tag) => (tag.name === normalized ? { ...tag, color: tagColorDraft } : tag));
+        return prev.map((tag) => (tag.name === normalized ? { ...tag, color } : tag));
       }
-      return [...prev, { name: normalized, color: tagColorDraft }];
+      return [...prev, { name: normalized, color }];
     });
+  };
 
-    addTagToSelected(normalized, tagColorDraft);
-    setTagNameDraft('');
+  const handleCreateTag = () => {
+    const normalized = normalizeTagName(tagManagerName);
+    if (!normalized) {
+      return;
+    }
+
+    upsertGlobalTag(normalized, tagManagerColor);
+
+    setTagManagerName('');
   };
 
   const handleRemoveTag = (name: string) => {
@@ -313,6 +337,33 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     );
   };
 
+  const handleDeleteTag = (name: string) => {
+    setCustomTags((prev) => prev.filter((tag) => tag.name !== name));
+    applyCards((prev) => prev.map((card) => ({ ...card, tags: card.tags.filter((tag) => tag.name !== name) })));
+    if (tagFilter === name) {
+      setTagFilter('all');
+    }
+  };
+
+  const handleDeleteCategory = (name: string) => {
+    setCategories((prev) => prev.filter((category) => category !== name));
+    applyCards((prev) => prev.map((card) => (card.category === name ? { ...card, category: undefined } : card)));
+    if (categoryFilter === name) {
+      setCategoryFilter('all');
+    }
+  };
+
+  const handleCreateAndAddTagFromSearch = () => {
+    const normalized = normalizeTagName(tagSearchQuery);
+    if (!normalized) {
+      return;
+    }
+    upsertGlobalTag(normalized, tagManagerColor);
+    addTagToSelected(normalized, tagManagerColor);
+    setTagSearchQuery('');
+    setTagSearchOpen(false);
+  };
+
   return (
     <div className={styles.container}>
       <Panel side="left" width="320px" className={styles.listPanel}>
@@ -334,20 +385,11 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
         <div className={styles.toolbox}>
           <div className={styles.toolboxHeader}>工具栏</div>
           <div className={styles.toolboxRow}>
-            <input
-              className={styles.tagInput}
-              value={tagNameDraft}
-              onChange={(event) => setTagNameDraft(event.target.value)}
-              placeholder="新增标签名"
-            />
-            <input
-              className={styles.colorInput}
-              type="color"
-              value={tagColorDraft}
-              onChange={(event) => setTagColorDraft(event.target.value)}
-            />
-            <Button size="sm" variant="secondary" onClick={handleCreateTag}>
-              添加标签
+            <Button size="sm" variant="secondary" onClick={() => setIsTagManagerOpen(true)}>
+              标签管理器
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setIsCategoryManagerOpen(true)}>
+              分类管理器
             </Button>
           </div>
           <div className={styles.tagFilters}>
@@ -441,13 +483,9 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               ))}
             </div>
             <div className={styles.categoryCreator}>
-              <input
-                value={newCategory}
-                onChange={(event) => setNewCategory(event.target.value)}
-                placeholder="新分类，例如：阵营A"
-                className={styles.categoryInput}
-              />
-              <Button size="sm" variant="secondary" onClick={handleAddCategory}>添加分类</Button>
+              <Button size="sm" variant="secondary" onClick={() => setIsCategoryManagerOpen(true)}>
+                打开分类管理器
+              </Button>
             </div>
           </div>
         </Panel>
@@ -565,6 +603,31 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                 </option>
               ))}
             </select>
+            <div className={styles.detailQuickCreateRow}>
+              <input
+                className={styles.detailInput}
+                value={detailNewCategory}
+                onChange={(event) => setDetailNewCategory(event.target.value)}
+                placeholder="新增分类并应用到当前卡片"
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const normalized = detailNewCategory.trim();
+                  if (!normalized) {
+                    return;
+                  }
+                  if (!categories.includes(normalized)) {
+                    setCategories((prev) => [...prev, normalized]);
+                  }
+                  handleAssignCategory(normalized);
+                  setDetailNewCategory('');
+                }}
+              >
+                添加并应用
+              </Button>
+            </div>
           </div>
 
           <div className={styles.detailSection}>
@@ -584,21 +647,41 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
             </div>
             {tagOptions.length > 0 && (
               <div className={styles.tagPalette}>
-                {tagOptions.map((tag) => (
-                  <div key={tag.name} className={styles.tagPaletteItem}>
-                    <button className={styles.tagFilter} onClick={() => addTagToSelected(tag.name, tag.color)}>
-                      <span className={styles.tagDot} style={{ background: tag.color }} />
-                      {tag.name}
-                    </button>
-                    <input
-                      className={styles.colorInput}
-                      type="color"
-                      value={tag.color}
-                      onChange={(event) => handleSetTagColor(tag.name, event.target.value)}
-                      aria-label={`调整标签 ${tag.name} 颜色`}
-                    />
-                  </div>
-                ))}
+                <div className={styles.tagSearchWrap}>
+                  <input
+                    className={styles.detailInput}
+                    value={tagSearchQuery}
+                    placeholder="搜索标签或输入后创建"
+                    onFocus={() => setTagSearchOpen(true)}
+                    onChange={(event) => {
+                      setTagSearchQuery(event.target.value);
+                      setTagSearchOpen(true);
+                    }}
+                  />
+                  {tagSearchOpen && (
+                    <div className={styles.tagSearchDropdown}>
+                      {tagSearchCandidates.map((tag) => (
+                        <button
+                          key={tag.name}
+                          className={styles.tagSearchItem}
+                          onClick={() => {
+                            addTagToSelected(tag.name, tag.color);
+                            setTagSearchQuery('');
+                            setTagSearchOpen(false);
+                          }}
+                        >
+                          <span className={styles.tagDot} style={{ background: tag.color }} />
+                          {tag.name}
+                        </button>
+                      ))}
+                      {normalizeTagName(tagSearchQuery) && !tagOptions.some((tag) => tag.name === normalizeTagName(tagSearchQuery)) && (
+                        <button className={styles.tagCreateItem} onClick={handleCreateAndAddTagFromSearch}>
+                          创建并添加标签 “{normalizeTagName(tagSearchQuery)}”
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -671,6 +754,85 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
             </svg>
           </button>
         </Panel>
+      )}
+
+      {isTagManagerOpen && (
+        <div className={styles.managerOverlay} role="presentation" onClick={() => setIsTagManagerOpen(false)}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>标签管理器</h3>
+            </div>
+            <div className={styles.managerRow}>
+              <input
+                className={styles.tagInput}
+                value={tagManagerName}
+                onChange={(event) => setTagManagerName(event.target.value)}
+                placeholder="新增标签名"
+              />
+              <input
+                className={styles.colorInput}
+                type="color"
+                value={tagManagerColor}
+                onChange={(event) => setTagManagerColor(event.target.value)}
+              />
+              <Button size="sm" variant="secondary" onClick={handleCreateTag}>
+                保存标签
+              </Button>
+            </div>
+            <div className={styles.managerList}>
+              {tagOptions.map((tag) => (
+                <div key={tag.name} className={styles.managerListItem}>
+                  <span className={styles.managerTagName}>
+                    <span className={styles.tagDot} style={{ background: tag.color }} />
+                    {tag.name}
+                  </span>
+                  <div className={styles.managerActions}>
+                    <input
+                      className={styles.colorInput}
+                      type="color"
+                      value={tag.color}
+                      onChange={(event) => handleSetTagColor(tag.name, event.target.value)}
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => handleDeleteTag(tag.name)}>
+                      删除
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCategoryManagerOpen && (
+        <div className={styles.managerOverlay} role="presentation" onClick={() => setIsCategoryManagerOpen(false)}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>分类管理器</h3>
+            </div>
+            <div className={styles.managerRow}>
+              <input
+                className={styles.tagInput}
+                value={categoryManagerName}
+                onChange={(event) => setCategoryManagerName(event.target.value)}
+                placeholder="新增分类名"
+              />
+              <Button size="sm" variant="secondary" onClick={handleAddCategory}>
+                保存分类
+              </Button>
+            </div>
+            <div className={styles.managerList}>
+              {categories.map((category) => (
+                <div key={category} className={styles.managerListItem}>
+                  <span className={styles.managerTagName}>{category}</span>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteCategory(category)}>
+                    删除
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
