@@ -1,4 +1,4 @@
-import type { ProjectData, SettingCard, Story, TreeNode } from '../types';
+import type { ProjectData, SettingCard, SettingLibrary, Story, TreeNode } from '../types';
 
 export interface BootstrapState {
   needsSetup: boolean;
@@ -21,6 +21,7 @@ export interface ExportedStoryData {
   workspace: {
     settings: SettingCard[];
     tree: TreeNode[];
+    library?: SettingLibrary;
   };
 }
 
@@ -38,6 +39,8 @@ export interface ProjectDataRepository {
   createStory: (input: CreateStoryInput) => Promise<Story>;
   renameStory: (storyId: string, title: string) => Promise<Story>;
   updateSettings: (storyId: string, settings: SettingCard[]) => Promise<void>;
+  updateStoryLibrary: (storyId: string, library: SettingLibrary) => Promise<void>;
+  updateGlobalLibrary: (library: SettingLibrary) => Promise<void>;
   updateTree: (storyId: string, tree: TreeNode[]) => Promise<void>;
   exportProject: () => Promise<ExportedProjectData>;
   exportStory: (storyId: string) => Promise<ExportedStoryData>;

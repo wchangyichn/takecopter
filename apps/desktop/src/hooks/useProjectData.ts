@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { projectRepository } from '../data/projectRepository';
 import { tauriRepository, isTauriRuntime } from '../data/tauriRepository';
-import type { ProjectData, SaveStatus, SettingCard, Story, TreeNode } from '../types';
+import type { ProjectData, SaveStatus, SettingCard, SettingLibrary, Story, TreeNode } from '../types';
 import type { BootstrapState, ExportedProjectData, ExportedStoryData, ProjectDataRepository } from '../data/repositoryTypes';
 
 interface UseProjectDataResult {
   stories: Story[];
   getWorkspaceCards: (storyId: string | null) => SettingCard[];
   getWorkspaceTree: (storyId: string | null) => TreeNode[];
+  getWorkspaceLibrary: (storyId: string | null) => SettingLibrary;
+  getGlobalLibrary: () => SettingLibrary;
   createStory: (title?: string) => Promise<string>;
   renameStory: (storyId: string, title: string) => Promise<void>;
   saveSettingCards: (storyId: string, cards: SettingCard[]) => Promise<void>;
+  saveStoryLibrary: (storyId: string, library: SettingLibrary) => Promise<void>;
+  saveGlobalLibrary: (library: SettingLibrary) => Promise<void>;
   saveTreeData: (storyId: string, tree: TreeNode[]) => Promise<void>;
   exportProjectFile: () => Promise<void>;
   exportStoryFile: (storyId: string) => Promise<void>;
@@ -29,6 +33,16 @@ interface UseProjectDataResult {
 }
 
 const storySuffix = ['晨雾', '夜航', '折光', '回潮', '暗线', '远火', '风眼'];
+const DEFAULT_GLOBAL_CATEGORIES = ['世界观', '角色', '道具'];
+
+function withDefaultGlobalCategories(library: SettingLibrary): SettingLibrary {
+  const merged = Array.from(new Set([...DEFAULT_GLOBAL_CATEGORIES, ...(library.categories ?? [])]));
+  return {
+    tags: library.tags ?? [],
+    categories: merged,
+    templates: library.templates ?? [],
+  };
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -61,6 +75,7 @@ export function useProjectData(): UseProjectDataResult {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isReady, setIsReady] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const fetchSetupState = useCallback(async () => {
     const next = await repository.getBootstrapState();
@@ -115,15 +130,26 @@ export function useProjectData(): UseProjectDataResult {
   }, [repository]);
 
   const runMutation = useCallback(async (action: () => Promise<void>) => {
-    setSaveStatus('saving');
-    try {
-      await action();
-      await reload();
-      setSaveStatus('saved');
-    } catch {
-      setSaveStatus('error');
-      throw new Error('保存失败');
-    }
+    const scheduled = mutationQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        setSaveStatus('saving');
+        try {
+          await action();
+          await reload();
+          setSaveStatus('saved');
+        } catch {
+          setSaveStatus('error');
+          throw new Error('保存失败');
+        }
+      });
+
+    mutationQueueRef.current = scheduled.then(
+      () => undefined,
+      () => undefined
+    );
+
+    await scheduled;
   }, [reload]);
 
   const createStory = useCallback(
@@ -167,6 +193,24 @@ export function useProjectData(): UseProjectDataResult {
     async (storyId: string, tree: TreeNode[]) => {
       await runMutation(async () => {
         await repository.updateTree(storyId, tree);
+      });
+    },
+    [repository, runMutation]
+  );
+
+  const saveStoryLibrary = useCallback(
+    async (storyId: string, library: SettingLibrary) => {
+      await runMutation(async () => {
+        await repository.updateStoryLibrary(storyId, library);
+      });
+    },
+    [repository, runMutation]
+  );
+
+  const saveGlobalLibrary = useCallback(
+    async (library: SettingLibrary) => {
+      await runMutation(async () => {
+        await repository.updateGlobalLibrary(library);
       });
     },
     [repository, runMutation]
@@ -313,13 +357,31 @@ export function useProjectData(): UseProjectDataResult {
     [workspaceTreeMap]
   );
 
+  const getWorkspaceLibrary = useCallback(
+    (storyId: string | null) => {
+      if (!storyId) {
+        return { tags: [], categories: [] };
+      }
+      return projectData.workspaces[storyId]?.library ?? { tags: [], categories: [] };
+    },
+    [projectData.workspaces]
+  );
+
+  const getGlobalLibrary = useCallback(() => {
+    return withDefaultGlobalCategories(projectData.sharedLibrary ?? { tags: [], categories: [] });
+  }, [projectData.sharedLibrary]);
+
   return {
     stories: projectData.stories,
     getWorkspaceCards,
     getWorkspaceTree,
+    getWorkspaceLibrary,
+    getGlobalLibrary,
     createStory,
     renameStory,
     saveSettingCards,
+    saveStoryLibrary,
+    saveGlobalLibrary,
     saveTreeData,
     exportProjectFile,
     exportStoryFile,

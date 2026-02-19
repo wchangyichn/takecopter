@@ -30,9 +30,74 @@ pub struct Story {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SettingTag {
+  pub name: String,
+  pub color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingCustomField {
+  pub name: String,
+  pub value: String,
+  #[serde(default)]
+  pub size: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingTemplatePreset {
+  pub r#type: String,
+  #[serde(default)]
+  pub summary: Option<String>,
+  #[serde(default)]
+  pub content: Option<String>,
+  #[serde(default)]
+  pub image_url: Option<String>,
+  #[serde(default)]
+  pub category: Option<String>,
+  #[serde(default)]
+  pub tags: Vec<SettingTag>,
+  #[serde(default)]
+  pub custom_fields: Vec<SettingCustomField>,
+  #[serde(default)]
+  pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingTemplate {
+  pub id: String,
+  pub name: String,
+  pub preset: SettingTemplatePreset,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingLibrary {
+  #[serde(default)]
+  pub tags: Vec<SettingTag>,
+  #[serde(default)]
+  pub categories: Vec<String>,
+  #[serde(default)]
+  pub templates: Vec<SettingTemplate>,
+}
+
+fn default_library() -> SettingLibrary {
+  SettingLibrary {
+    tags: vec![],
+    categories: vec!["世界观".to_string(), "角色".to_string(), "道具".to_string()],
+    templates: vec![],
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Workspace {
   pub settings: Vec<serde_json::Value>,
   pub tree: Vec<serde_json::Value>,
+  #[serde(default = "default_library")]
+  pub library: SettingLibrary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +105,8 @@ pub struct Workspace {
 pub struct ProjectData {
   pub stories: Vec<Story>,
   pub workspaces: std::collections::HashMap<String, Workspace>,
+  #[serde(default = "default_library")]
+  pub shared_library: SettingLibrary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +156,8 @@ struct ProjectManifest {
   app: String,
   schema_version: i64,
   created_at: String,
+  #[serde(default = "default_library")]
+  shared_library: SettingLibrary,
   stories: Vec<StoryManifestEntry>,
 }
 
@@ -208,6 +277,7 @@ fn ensure_root_layout(root: &Path) -> Result<(), String> {
       app: "takecopter".to_string(),
       schema_version: CURRENT_SCHEMA_VERSION,
       created_at: now_rfc3339(),
+      shared_library: default_library(),
       stories: vec![],
     };
     let raw = serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?;
@@ -228,6 +298,7 @@ fn read_manifest(root: &Path) -> Result<ProjectManifest, String> {
         app: legacy.app,
         schema_version: legacy.schema_version,
         created_at: legacy.created_at,
+        shared_library: default_library(),
         stories: legacy
           .stories
           .into_iter()
@@ -264,11 +335,17 @@ fn open_story_db(path: &Path) -> Result<Connection, String> {
       CREATE TABLE IF NOT EXISTS workspace (
         id INTEGER PRIMARY KEY,
         settings_json TEXT NOT NULL,
-        tree_json TEXT NOT NULL
+        tree_json TEXT NOT NULL,
+        library_json TEXT NOT NULL DEFAULT '{\"tags\":[],\"categories\":[]}'
       );
       ",
     )
     .map_err(|error| format!("初始化故事数据库失败: {error}"))?;
+
+  let _ = conn.execute(
+    "ALTER TABLE workspace ADD COLUMN library_json TEXT NOT NULL DEFAULT '{\"tags\":[],\"categories\":[]}'",
+    [],
+  );
 
   Ok(conn)
 }
@@ -278,28 +355,35 @@ fn read_workspace(path: &Path) -> Result<Workspace, String> {
     return Ok(Workspace {
       settings: vec![],
       tree: vec![],
+      library: default_library(),
     });
   }
 
   let conn = open_story_db(path)?;
   let row = conn
-    .query_row("SELECT settings_json, tree_json FROM workspace WHERE id = 1", [], |row| {
+    .query_row("SELECT settings_json, tree_json, library_json FROM workspace WHERE id = 1", [], |row| {
       let settings_json: String = row.get(0)?;
       let tree_json: String = row.get(1)?;
-      Ok((settings_json, tree_json))
+      let library_json: Option<String> = row.get(2)?;
+      Ok((settings_json, tree_json, library_json))
     })
     .optional()
     .map_err(|error| format!("读取故事工作区失败: {error}"))?;
 
-  if let Some((settings_json, tree_json)) = row {
+   if let Some((settings_json, tree_json, library_json)) = row {
     let settings = serde_json::from_str::<Vec<serde_json::Value>>(&settings_json)
       .map_err(|error| format!("解析故事设定失败: {error}"))?;
     let tree = serde_json::from_str::<Vec<serde_json::Value>>(&tree_json).map_err(|error| format!("解析故事树结构失败: {error}"))?;
-    Ok(Workspace { settings, tree })
+    let library = library_json
+      .as_deref()
+      .map(|raw| serde_json::from_str::<SettingLibrary>(raw).unwrap_or_else(|_| default_library()))
+      .unwrap_or_else(default_library);
+    Ok(Workspace { settings, tree, library })
   } else {
     Ok(Workspace {
       settings: vec![],
       tree: vec![],
+      library: default_library(),
     })
   }
 }
@@ -308,11 +392,12 @@ fn write_workspace(path: &Path, workspace: &Workspace) -> Result<(), String> {
   let conn = open_story_db(path)?;
   let settings_json = serde_json::to_string(&workspace.settings).map_err(|error| error.to_string())?;
   let tree_json = serde_json::to_string(&workspace.tree).map_err(|error| error.to_string())?;
+  let library_json = serde_json::to_string(&workspace.library).map_err(|error| error.to_string())?;
 
   conn
     .execute(
-      "INSERT INTO workspace (id, settings_json, tree_json) VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, tree_json = excluded.tree_json",
-      params![settings_json, tree_json],
+      "INSERT INTO workspace (id, settings_json, tree_json, library_json) VALUES (1, ?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, tree_json = excluded.tree_json, library_json = excluded.library_json",
+      params![settings_json, tree_json, library_json],
     )
     .map_err(|error| format!("写入故事工作区失败: {error}"))?;
   Ok(())
@@ -349,6 +434,7 @@ fn load_project_data(root: &Path) -> Result<ProjectData, String> {
   Ok(ProjectData {
     stories: manifest.stories.into_iter().map(|item| item.story).collect(),
     workspaces,
+    shared_library: manifest.shared_library,
   })
 }
 
@@ -507,6 +593,7 @@ pub fn create_story(app: AppHandle, state: State<ProjectState>, input: CreateSto
   let workspace = Workspace {
     settings: vec![],
     tree: vec![],
+    library: default_library(),
   };
   write_workspace(&story_db_path(&root, &folder_name), &workspace)?;
 
@@ -574,6 +661,7 @@ pub fn update_settings(
   let next = Workspace {
     settings,
     tree: current.tree,
+    library: current.library,
   };
   write_workspace(&story_db_path(&root, &entry.folder_name), &next)?;
 
@@ -598,10 +686,40 @@ pub fn update_tree(
   let next = Workspace {
     settings: current.settings,
     tree,
+    library: current.library,
   };
   write_workspace(&story_db_path(&root, &entry.folder_name), &next)?;
 
   entry.story.updated_at = now_rfc3339();
+  write_manifest(&root, &manifest)
+}
+
+#[tauri::command]
+pub fn update_story_library(
+  app: AppHandle,
+  state: State<ProjectState>,
+  story_id: String,
+  library: SettingLibrary,
+) -> Result<(), String> {
+  let root = require_active_root(&app, &state)?;
+  let mut manifest = read_manifest(&root)?;
+  let Some(entry) = find_story_entry_mut(&mut manifest, &story_id) else {
+    return Err("故事不存在".to_string());
+  };
+
+  let mut current = read_workspace(&story_db_path(&root, &entry.folder_name))?;
+  current.library = library;
+  write_workspace(&story_db_path(&root, &entry.folder_name), &current)?;
+
+  entry.story.updated_at = now_rfc3339();
+  write_manifest(&root, &manifest)
+}
+
+#[tauri::command]
+pub fn update_global_library(app: AppHandle, state: State<ProjectState>, library: SettingLibrary) -> Result<(), String> {
+  let root = require_active_root(&app, &state)?;
+  let mut manifest = read_manifest(&root)?;
+  manifest.shared_library = library;
   write_manifest(&root, &manifest)
 }
 
@@ -686,6 +804,7 @@ pub fn import_project(app: AppHandle, state: State<ProjectState>, payload: Expor
   ensure_root_layout(&root)?;
 
   let mut manifest = read_manifest(&root)?;
+  manifest.shared_library = payload.data.shared_library.clone();
   manifest.stories = payload
     .data
     .stories
@@ -701,6 +820,7 @@ pub fn import_project(app: AppHandle, state: State<ProjectState>, payload: Expor
     let workspace = payload.data.workspaces.get(&entry.story.id).cloned().unwrap_or(Workspace {
       settings: vec![],
       tree: vec![],
+      library: default_library(),
     });
     write_workspace(&story_db_path(&root, &entry.folder_name), &workspace)?;
   }

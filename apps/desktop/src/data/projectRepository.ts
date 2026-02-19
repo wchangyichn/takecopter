@@ -1,7 +1,7 @@
 import initSqlJs, { type Database } from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { createDbBinaryStorage } from './dbStorage';
-import type { ProjectData, SettingCard, Story, TreeNode } from '../types';
+import type { ProjectData, SettingCard, SettingLibrary, SettingTemplate, Story, TreeNode } from '../types';
 import type {
   BootstrapState,
   CreateStoryInput,
@@ -14,6 +14,16 @@ const DB_STORAGE_KEY = 'takecopter.desktop.sqlite.v1';
 const LEGACY_STORAGE_KEY = 'takecopter.desktop.project.v1';
 const PROJECT_ROOT_KEY = 'takecopter.desktop.project-root.v1';
 const CURRENT_SCHEMA_VERSION = 1;
+const DEFAULT_GLOBAL_CATEGORIES = ['世界观', '角色', '道具'];
+const EMPTY_LIBRARY: SettingLibrary = { tags: [], categories: [], templates: [] };
+
+function withDefaultGlobalCategories(library: SettingLibrary): SettingLibrary {
+  return {
+    tags: library.tags,
+    categories: Array.from(new Set([...DEFAULT_GLOBAL_CATEGORIES, ...library.categories])),
+    templates: library.templates ?? [],
+  };
+}
 
 interface LegacySerializedStory {
   id: string;
@@ -30,6 +40,104 @@ interface LegacyProjectData {
 
 type StoryDateLike = Omit<Story, 'updatedAt'> & { updatedAt: Date | string };
 type ProjectDataDateLike = Omit<ProjectData, 'stories'> & { stories: StoryDateLike[] };
+
+function normalizeLibrary(input: unknown): SettingLibrary {
+  if (!input || typeof input !== 'object') {
+    return { ...EMPTY_LIBRARY };
+  }
+
+  const source = input as { tags?: unknown; categories?: unknown };
+  const tags = Array.isArray(source.tags)
+    ? source.tags
+        .filter(
+          (item): item is { name: string; color: string } =>
+            Boolean(item) &&
+            typeof item === 'object' &&
+            'name' in item &&
+            typeof item.name === 'string' &&
+            item.name.trim().length > 0 &&
+            'color' in item &&
+            typeof item.color === 'string' &&
+            item.color.trim().length > 0
+        )
+        .map((item) => ({ name: item.name.trim(), color: item.color.trim() }))
+    : [];
+
+  const categories = Array.isArray(source.categories)
+    ? source.categories.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())
+    : [];
+
+  const templates = Array.isArray((source as { templates?: unknown }).templates)
+    ? ((source as { templates?: unknown }).templates as unknown[]).flatMap((item) => {
+        if (!item || typeof item !== 'object') {
+          return [];
+        }
+
+        const raw = item as {
+          id?: unknown;
+          name?: unknown;
+          preset?: unknown;
+        };
+        if (typeof raw.id !== 'string' || !raw.id.trim() || typeof raw.name !== 'string' || !raw.name.trim()) {
+          return [];
+        }
+        if (!raw.preset || typeof raw.preset !== 'object') {
+          return [];
+        }
+
+        const preset = raw.preset as SettingTemplate['preset'];
+        return [{
+          id: raw.id.trim(),
+          name: raw.name.trim(),
+          preset: {
+            type:
+              preset.type === 'character' ||
+              preset.type === 'location' ||
+              preset.type === 'item' ||
+              preset.type === 'event'
+                ? preset.type
+                : 'event',
+            summary: typeof preset.summary === 'string' ? preset.summary : undefined,
+            content: typeof preset.content === 'string' ? preset.content : undefined,
+            imageUrl: typeof preset.imageUrl === 'string' ? preset.imageUrl : undefined,
+            category: typeof preset.category === 'string' ? preset.category.trim() || undefined : undefined,
+            tags: Array.isArray(preset.tags)
+              ? preset.tags
+                  .filter(
+                    (tag): tag is { name: string; color: string } =>
+                      Boolean(tag) &&
+                      typeof tag === 'object' &&
+                      'name' in tag &&
+                      typeof tag.name === 'string' &&
+                      tag.name.trim().length > 0 &&
+                      'color' in tag &&
+                      typeof tag.color === 'string' &&
+                      tag.color.trim().length > 0
+                  )
+                  .map((tag) => ({ name: tag.name.trim(), color: tag.color.trim() }))
+              : [],
+            customFields: Array.isArray(preset.customFields)
+              ? preset.customFields
+                  .filter((field) => Boolean(field) && typeof field.name === 'string' && field.name.trim().length > 0 && typeof field.value === 'string')
+                  .map((field) => ({
+                    id: typeof field.id === 'string' && field.id.trim().length > 0 ? field.id.trim() : undefined,
+                    name: field.name.trim(),
+                    value: field.value,
+                    size: field.size === 'sm' || field.size === 'md' || field.size === 'lg' ? field.size : 'md',
+                    x: typeof field.x === 'number' ? field.x : undefined,
+                    y: typeof field.y === 'number' ? field.y : undefined,
+                    w: typeof field.w === 'number' ? field.w : undefined,
+                    h: typeof field.h === 'number' ? field.h : undefined,
+                  }))
+              : [],
+            color: typeof preset.color === 'string' ? preset.color : undefined,
+          },
+        }];
+      })
+    : [];
+
+  return { tags, categories, templates };
+}
 
 function clone<T>(value: T): T {
   if (typeof structuredClone === 'function') {
@@ -54,7 +162,17 @@ function normalizeProjectData(data: ProjectDataDateLike): ProjectData {
         updatedAt,
       };
     }),
-    workspaces: data.workspaces ?? {},
+    workspaces: Object.fromEntries(
+      Object.entries(data.workspaces ?? {}).map(([storyId, workspace]) => [
+        storyId,
+        {
+          settings: workspace.settings ?? [],
+          tree: workspace.tree ?? [],
+          library: normalizeLibrary(workspace.library),
+        },
+      ])
+    ),
+    sharedLibrary: normalizeLibrary((data as ProjectData).sharedLibrary),
   };
 }
 
@@ -120,7 +238,7 @@ function rowsToStories(db: Database): Story[] {
 }
 
 function rowsToWorkspaces(db: Database): ProjectData['workspaces'] {
-  const result = db.exec('SELECT story_id, settings_json, tree_json FROM workspaces');
+  const result = db.exec('SELECT story_id, settings_json, tree_json, library_json FROM workspaces');
   const output: ProjectData['workspaces'] = {};
 
   if (!result[0]) {
@@ -133,11 +251,13 @@ function rowsToWorkspaces(db: Database): ProjectData['workspaces'] {
       output[storyId] = {
         settings: JSON.parse(String(row[1])) as SettingCard[],
         tree: JSON.parse(String(row[2])) as TreeNode[],
+        library: normalizeLibrary(row[3] ? JSON.parse(String(row[3])) : EMPTY_LIBRARY),
       };
     } catch {
       output[storyId] = {
         settings: [],
         tree: [],
+        library: { ...EMPTY_LIBRARY },
       };
     }
   }
@@ -255,19 +375,45 @@ export class ProjectRepository implements ProjectDataRepository {
         story_id TEXT PRIMARY KEY,
         settings_json TEXT NOT NULL,
         tree_json TEXT NOT NULL,
+        library_json TEXT NOT NULL DEFAULT '{"tags":[],"categories":[]}',
         FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
       );
+    `);
+
+    try {
+      db.exec(`
+        ALTER TABLE workspaces
+        ADD COLUMN library_json TEXT NOT NULL DEFAULT '{"tags":[],"categories":[]}';
+      `);
+    } catch (error) {
+      if (!(error instanceof Error) || !/duplicate column name/i.test(error.message)) {
+        throw error;
+      }
+    }
+
+    db.exec(`
+      UPDATE workspaces
+      SET library_json='{"tags":[],"categories":[]}'
+      WHERE library_json IS NULL OR TRIM(library_json)='';
     `);
 
     const versionRow = db.exec("SELECT value FROM meta WHERE key='schema_version'");
     if (!versionRow[0] || versionRow[0].values.length === 0) {
       db.run(`INSERT INTO meta (key, value) VALUES ('schema_version', '${CURRENT_SCHEMA_VERSION}')`);
-      return;
+    } else {
+      const current = Number(versionRow[0].values[0][0]);
+      if (current < CURRENT_SCHEMA_VERSION) {
+        db.run(`UPDATE meta SET value='${CURRENT_SCHEMA_VERSION}' WHERE key='schema_version'`);
+      }
     }
 
-    const current = Number(versionRow[0].values[0][0]);
-    if (current < CURRENT_SCHEMA_VERSION) {
-      db.run(`UPDATE meta SET value='${CURRENT_SCHEMA_VERSION}' WHERE key='schema_version'`);
+    const libraryMeta = db.exec("SELECT value FROM meta WHERE key='global_library_json'");
+    if (!libraryMeta[0] || libraryMeta[0].values.length === 0) {
+      db.run(
+        `INSERT INTO meta (key, value) VALUES ('global_library_json', ${sqlText(
+          JSON.stringify(withDefaultGlobalCategories({ tags: [], categories: [] }))
+        )})`
+      );
     }
   }
 
@@ -305,11 +451,15 @@ export class ProjectRepository implements ProjectDataRepository {
       }
 
       for (const story of data.stories) {
-        const workspace = data.workspaces[story.id] ?? { settings: [], tree: [] };
+        const workspace = data.workspaces[story.id] ?? { settings: [], tree: [], library: { ...EMPTY_LIBRARY } };
         db.exec(
-          `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))})`
+          `INSERT INTO workspaces (story_id, settings_json, tree_json, library_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))}, ${sqlText(JSON.stringify(normalizeLibrary(workspace.library)))})`
         );
       }
+
+      db.exec(
+        `INSERT OR REPLACE INTO meta (key, value) VALUES ('global_library_json', ${sqlText(JSON.stringify(normalizeLibrary(data.sharedLibrary)))})`
+      );
 
       db.exec('COMMIT');
     } catch (error) {
@@ -324,9 +474,13 @@ export class ProjectRepository implements ProjectDataRepository {
 
   async load(): Promise<ProjectData> {
     const db = await this.getDb();
+    const globalLibraryResult = db.exec("SELECT value FROM meta WHERE key='global_library_json' LIMIT 1");
+    const sharedLibraryRaw = globalLibraryResult[0]?.values[0]?.[0];
+
     return {
       stories: rowsToStories(db),
       workspaces: rowsToWorkspaces(db),
+      sharedLibrary: withDefaultGlobalCategories(normalizeLibrary(sharedLibraryRaw ? JSON.parse(String(sharedLibraryRaw)) : EMPTY_LIBRARY)),
     };
   }
 
@@ -345,7 +499,7 @@ export class ProjectRepository implements ProjectDataRepository {
       `INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (${sqlText(story.id)}, ${sqlText(story.title)}, ${sqlText(story.description)}, ${sqlText(story.updatedAt.toISOString())}, ${sqlText(story.coverColor)})`
     );
     db.exec(
-      `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText('[]')}, ${sqlText('[]')})`
+      `INSERT INTO workspaces (story_id, settings_json, tree_json, library_json) VALUES (${sqlText(story.id)}, ${sqlText('[]')}, ${sqlText('[]')}, ${sqlText('{"tags":[],"categories":[]}')})`
     );
 
     await this.persist(db);
@@ -396,6 +550,29 @@ export class ProjectRepository implements ProjectDataRepository {
     }
   }
 
+  async updateStoryLibrary(storyId: string, library: SettingLibrary): Promise<void> {
+    const db = await this.getDb();
+    db.exec('BEGIN');
+    try {
+      db.exec(
+        `UPDATE workspaces SET library_json = ${sqlText(JSON.stringify(normalizeLibrary(library)))} WHERE story_id = ${sqlText(storyId)}`
+      );
+      db.exec('COMMIT');
+      await this.persist(db);
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async updateGlobalLibrary(library: SettingLibrary): Promise<void> {
+    const db = await this.getDb();
+    db.exec(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('global_library_json', ${sqlText(JSON.stringify(normalizeLibrary(library)))})`
+    );
+    await this.persist(db);
+  }
+
   async updateTree(storyId: string, tree: TreeNode[]): Promise<void> {
     const db = await this.getDb();
     db.exec('BEGIN');
@@ -432,7 +609,7 @@ export class ProjectRepository implements ProjectDataRepository {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       story,
-      workspace: data.workspaces[story.id] ?? { settings: [], tree: [] },
+      workspace: data.workspaces[story.id] ?? { settings: [], tree: [], library: { ...EMPTY_LIBRARY } },
     };
   }
 
@@ -483,7 +660,7 @@ export class ProjectRepository implements ProjectDataRepository {
         `INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (${sqlText(story.id)}, ${sqlText(story.title)}, ${sqlText(story.description)}, ${sqlText(story.updatedAt.toISOString())}, ${sqlText(story.coverColor)})`
       );
       db.exec(
-        `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))})`
+        `INSERT INTO workspaces (story_id, settings_json, tree_json, library_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))}, ${sqlText(JSON.stringify(normalizeLibrary(workspace.library)))})`
       );
       db.exec('COMMIT');
     } catch (error) {

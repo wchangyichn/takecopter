@@ -5,8 +5,8 @@ mod project;
 use project::{
   backup_local_database, create_story, ensure_project, export_project, export_project_to_local, export_story,
   export_story_to_local, get_bootstrap_state, import_project, import_story, initialize_project_root,
-  open_project_root, open_story_database, open_story_folder, pick_project_root, rename_story, update_settings,
-  update_tree, ProjectState,
+  open_project_root, open_story_database, open_story_folder, pick_project_root, rename_story, update_global_library,
+  update_settings, update_story_library, update_tree, ProjectState,
 };
 
 fn main() {
@@ -21,6 +21,8 @@ fn main() {
       create_story,
       rename_story,
       update_settings,
+      update_story_library,
+      update_global_library,
       update_tree,
       export_project,
       export_story,
