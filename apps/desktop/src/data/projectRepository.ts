@@ -22,6 +22,9 @@ interface LegacyProjectData {
   workspaces: ProjectData['workspaces'];
 }
 
+type StoryDateLike = Omit<Story, 'updatedAt'> & { updatedAt: Date | string };
+type ProjectDataDateLike = Omit<ProjectData, 'stories'> & { stories: StoryDateLike[] };
+
 function clone<T>(value: T): T {
   if (typeof structuredClone === 'function') {
     return structuredClone(value);
@@ -50,6 +53,25 @@ function defaultProjectData(): ProjectData {
   };
 }
 
+function normalizeProjectData(data: ProjectDataDateLike): ProjectData {
+  return {
+    stories: data.stories.map((story, index) => {
+      const rawUpdatedAt = story.updatedAt instanceof Date ? story.updatedAt : new Date(story.updatedAt);
+      const updatedAt = Number.isNaN(rawUpdatedAt.getTime()) ? new Date() : rawUpdatedAt;
+
+      return {
+        id: typeof story.id === 'string' && story.id.trim() ? story.id : `story-${index + 1}`,
+        title: typeof story.title === 'string' && story.title.trim() ? story.title : `未命名故事 ${index + 1}`,
+        description: typeof story.description === 'string' ? story.description : '',
+        coverColor:
+          typeof story.coverColor === 'string' && story.coverColor.trim() ? story.coverColor : 'var(--coral-400)',
+        updatedAt,
+      };
+    }),
+    workspaces: data.workspaces ?? {},
+  };
+}
+
 function parseLegacyData(raw: string | null): ProjectData | null {
   if (!raw) {
     return null;
@@ -57,12 +79,28 @@ function parseLegacyData(raw: string | null): ProjectData | null {
 
   try {
     const parsed = JSON.parse(raw) as LegacyProjectData;
-    return {
-      stories: parsed.stories.map((item) => ({
+    if (!parsed || !Array.isArray(parsed.stories)) {
+      return null;
+    }
+
+    const stories = parsed.stories
+      .filter(
+        (item) =>
+          item &&
+          typeof item.id === 'string' &&
+          typeof item.title === 'string' &&
+          typeof item.description === 'string' &&
+          typeof item.updatedAt === 'string' &&
+          typeof item.coverColor === 'string'
+      )
+      .map((item) => ({
         ...item,
         updatedAt: new Date(item.updatedAt),
-      })),
-      workspaces: parsed.workspaces,
+      }));
+
+    return {
+      stories,
+      workspaces: parsed.workspaces ?? {},
     };
   } catch {
     return null;
@@ -93,10 +131,18 @@ function rowsToWorkspaces(db: Database): ProjectData['workspaces'] {
   }
 
   for (const row of result[0].values) {
-    output[String(row[0])] = {
-      settings: JSON.parse(String(row[1])) as SettingCard[],
-      tree: JSON.parse(String(row[2])) as TreeNode[],
-    };
+    const storyId = String(row[0]);
+    try {
+      output[storyId] = {
+        settings: JSON.parse(String(row[1])) as SettingCard[],
+        tree: JSON.parse(String(row[2])) as TreeNode[],
+      };
+    } catch {
+      output[storyId] = {
+        settings: [],
+        tree: [],
+      };
+    }
   }
 
   return output;
@@ -105,6 +151,10 @@ function rowsToWorkspaces(db: Database): ProjectData['workspaces'] {
 function randomColor(): string {
   const palette = ['var(--coral-400)', 'var(--violet-400)', 'var(--teal-400)', 'var(--amber-400)', 'var(--rose-400)'];
   return palette[Math.floor(Math.random() * palette.length)];
+}
+
+function sqlText(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 export class ProjectRepository implements ProjectDataRepository {
@@ -124,12 +174,24 @@ export class ProjectRepository implements ProjectDataRepository {
     });
 
     const persisted = await this.storage.load();
-    const db = persisted ? new SQL.Database(persisted) : new SQL.Database();
+    let usedFallback = false;
+    let db: Database;
+
+    if (persisted) {
+      try {
+        db = new SQL.Database(persisted);
+      } catch {
+        db = new SQL.Database();
+        usedFallback = true;
+      }
+    } else {
+      db = new SQL.Database();
+    }
 
     this.setupSchema(db);
     const seeded = this.ensureSeedData(db);
 
-    if (seeded) {
+    if (seeded || usedFallback) {
       await this.persist(db);
     }
 
@@ -160,14 +222,14 @@ export class ProjectRepository implements ProjectDataRepository {
     `);
 
     const versionRow = db.exec("SELECT value FROM meta WHERE key='schema_version'");
-    if (!versionRow[0]) {
-      db.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", [String(CURRENT_SCHEMA_VERSION)]);
+    if (!versionRow[0] || versionRow[0].values.length === 0) {
+      db.run(`INSERT INTO meta (key, value) VALUES ('schema_version', '${CURRENT_SCHEMA_VERSION}')`);
       return;
     }
 
     const current = Number(versionRow[0].values[0][0]);
     if (current < CURRENT_SCHEMA_VERSION) {
-      db.run("UPDATE meta SET value = ? WHERE key='schema_version'", [String(CURRENT_SCHEMA_VERSION)]);
+      db.run(`UPDATE meta SET value='${CURRENT_SCHEMA_VERSION}' WHERE key='schema_version'`);
     }
   }
 
@@ -196,17 +258,15 @@ export class ProjectRepository implements ProjectDataRepository {
       db.exec('DELETE FROM stories;');
 
       for (const story of data.stories) {
-        db.run(
-          'INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (?, ?, ?, ?, ?)',
-          [story.id, story.title, story.description, story.updatedAt.toISOString(), story.coverColor]
+        db.exec(
+          `INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (${sqlText(story.id)}, ${sqlText(story.title)}, ${sqlText(story.description)}, ${sqlText(story.updatedAt.toISOString())}, ${sqlText(story.coverColor)})`
         );
       }
 
       for (const story of data.stories) {
         const workspace = data.workspaces[story.id] ?? { settings: [], tree: [] };
-        db.run(
-          'INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (?, ?, ?)',
-          [story.id, JSON.stringify(workspace.settings), JSON.stringify(workspace.tree)]
+        db.exec(
+          `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText(JSON.stringify(workspace.settings))}, ${sqlText(JSON.stringify(workspace.tree))})`
         );
       }
 
@@ -240,11 +300,12 @@ export class ProjectRepository implements ProjectDataRepository {
       coverColor: randomColor(),
     };
 
-    db.run(
-      'INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (?, ?, ?, ?, ?)',
-      [story.id, story.title, story.description, story.updatedAt.toISOString(), story.coverColor]
+    db.exec(
+      `INSERT INTO stories (id, title, description, updated_at, cover_color) VALUES (${sqlText(story.id)}, ${sqlText(story.title)}, ${sqlText(story.description)}, ${sqlText(story.updatedAt.toISOString())}, ${sqlText(story.coverColor)})`
     );
-    db.run('INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (?, ?, ?)', [story.id, '[]', '[]']);
+    db.exec(
+      `INSERT INTO workspaces (story_id, settings_json, tree_json) VALUES (${sqlText(story.id)}, ${sqlText('[]')}, ${sqlText('[]')})`
+    );
 
     await this.persist(db);
     return story;
@@ -254,8 +315,10 @@ export class ProjectRepository implements ProjectDataRepository {
     const db = await this.getDb();
     db.exec('BEGIN');
     try {
-      db.run('UPDATE workspaces SET settings_json = ? WHERE story_id = ?', [JSON.stringify(clone(settings)), storyId]);
-      db.run('UPDATE stories SET updated_at = ? WHERE id = ?', [new Date().toISOString(), storyId]);
+      db.exec(
+        `UPDATE workspaces SET settings_json = ${sqlText(JSON.stringify(clone(settings)))} WHERE story_id = ${sqlText(storyId)}`
+      );
+      db.exec(`UPDATE stories SET updated_at = ${sqlText(new Date().toISOString())} WHERE id = ${sqlText(storyId)}`);
       db.exec('COMMIT');
       await this.persist(db);
     } catch (error) {
@@ -268,8 +331,8 @@ export class ProjectRepository implements ProjectDataRepository {
     const db = await this.getDb();
     db.exec('BEGIN');
     try {
-      db.run('UPDATE workspaces SET tree_json = ? WHERE story_id = ?', [JSON.stringify(clone(tree)), storyId]);
-      db.run('UPDATE stories SET updated_at = ? WHERE id = ?', [new Date().toISOString(), storyId]);
+      db.exec(`UPDATE workspaces SET tree_json = ${sqlText(JSON.stringify(clone(tree)))} WHERE story_id = ${sqlText(storyId)}`);
+      db.exec(`UPDATE stories SET updated_at = ${sqlText(new Date().toISOString())} WHERE id = ${sqlText(storyId)}`);
       db.exec('COMMIT');
       await this.persist(db);
     } catch (error) {
@@ -298,7 +361,7 @@ export class ProjectRepository implements ProjectDataRepository {
     }
 
     const db = await this.getDb();
-    this.replaceAll(db, payload.data);
+    this.replaceAll(db, normalizeProjectData(payload.data));
     await this.persist(db);
   }
 }

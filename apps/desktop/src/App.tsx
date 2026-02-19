@@ -17,6 +17,7 @@ function App() {
     importProjectFile,
     saveStatus,
     isReady,
+    bootError,
   } = useProjectData();
 
   const handleStorySelect = (id: string) => {
@@ -124,6 +125,17 @@ function App() {
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontSize: '14px' }}>
         正在加载本地项目数据...
+      </div>
+    );
+  }
+
+  if (bootError) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '24px', textAlign: 'center' }}>
+        <div>
+          <h2 style={{ marginBottom: '8px' }}>启动失败</h2>
+          <p style={{ margin: 0 }}>{bootError}</p>
+        </div>
       </div>
     );
   }

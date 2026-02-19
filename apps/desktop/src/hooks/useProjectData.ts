@@ -15,6 +15,7 @@ interface UseProjectDataResult {
   importProjectFile: (file: File) => Promise<void>;
   saveStatus: SaveStatus;
   isReady: boolean;
+  bootError: string | null;
 }
 
 const storySuffix = ['晨雾', '夜航', '折光', '回潮', '暗线', '远火', '风眼'];
@@ -24,17 +25,31 @@ export function useProjectData(): UseProjectDataResult {
   const [projectData, setProjectData] = useState<ProjectData>({ stories: [], workspaces: {} });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isReady, setIsReady] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
 
     const bootstrap = async () => {
-      const loaded = await repository.load();
-      if (isCancelled) {
-        return;
+      try {
+        const loaded = await repository.load();
+        if (isCancelled) {
+          return;
+        }
+        setProjectData(loaded);
+        setBootError(null);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+        const details = error instanceof Error ? error.message : '未知错误';
+        console.error('项目启动加载失败', error);
+        setBootError(`本地数据加载失败：${details}`);
+      } finally {
+        if (!isCancelled) {
+          setIsReady(true);
+        }
       }
-      setProjectData(loaded);
-      setIsReady(true);
     };
 
     void bootstrap();
@@ -167,5 +182,6 @@ export function useProjectData(): UseProjectDataResult {
     importProjectFile,
     saveStatus,
     isReady,
+    bootError,
   };
 }

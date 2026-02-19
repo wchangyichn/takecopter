@@ -4,7 +4,24 @@ import type { CreateStoryInput, ExportedProjectData, ProjectDataRepository } fro
 
 interface EnsureProjectResponse {
   projectPath: string;
-  data: ProjectData;
+  data: SerializedProjectData;
+}
+
+type SerializedStory = Omit<Story, 'updatedAt'> & { updatedAt: string };
+type SerializedProjectData = Omit<ProjectData, 'stories'> & { stories: SerializedStory[] };
+
+function hydrateStory(story: SerializedStory): Story {
+  return {
+    ...story,
+    updatedAt: new Date(story.updatedAt),
+  };
+}
+
+function hydrateProjectData(data: SerializedProjectData): ProjectData {
+  return {
+    stories: data.stories.map(hydrateStory),
+    workspaces: data.workspaces,
+  };
 }
 
 function isTauriRuntime(): boolean {
@@ -18,11 +35,12 @@ function isTauriRuntime(): boolean {
 class TauriRepository implements ProjectDataRepository {
   async load(): Promise<ProjectData> {
     const response = await invoke<EnsureProjectResponse>('ensure_project');
-    return response.data;
+    return hydrateProjectData(response.data);
   }
 
   async createStory(input: CreateStoryInput): Promise<Story> {
-    return invoke<Story>('create_story', { input });
+    const story = await invoke<SerializedStory>('create_story', { input });
+    return hydrateStory(story);
   }
 
   async updateSettings(storyId: string, settings: SettingCard[]): Promise<void> {
