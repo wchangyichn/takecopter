@@ -97,9 +97,11 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
   const [toolbarTagSearchOpen, setToolbarTagSearchOpen] = useState(false);
   const [toolbarTagQuery, setToolbarTagQuery] = useState('');
+  const [toolbarTagActiveIndex, setToolbarTagActiveIndex] = useState(0);
 
   const [detailTagSearchOpen, setDetailTagSearchOpen] = useState(false);
   const [detailTagQuery, setDetailTagQuery] = useState('');
+  const [detailTagActiveIndex, setDetailTagActiveIndex] = useState(0);
   const [detailNewCategory, setDetailNewCategory] = useState('');
 
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
@@ -112,6 +114,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   const [categories, setCategories] = useState<string[]>(() => uniqueCategories(normalizeCards(sourceCards)));
 
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
 
   const localIdRef = useRef(0);
   const cardsRef = useRef<EditableCard[]>(cards);
@@ -224,11 +227,13 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       if (toolbarTagSearchOpen && toolbarSearchRef.current && !toolbarSearchRef.current.contains(target)) {
         setToolbarTagSearchOpen(false);
         setToolbarTagQuery('');
+        setToolbarTagActiveIndex(0);
       }
 
       if (detailTagSearchOpen && detailSearchRef.current && !detailSearchRef.current.contains(target)) {
         setDetailTagSearchOpen(false);
         setDetailTagQuery('');
+        setDetailTagActiveIndex(0);
       }
     };
 
@@ -420,6 +425,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     setActiveTagFilters((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
     setToolbarTagQuery('');
     setToolbarTagSearchOpen(false);
+    setToolbarTagActiveIndex(0);
   };
 
   const createAndAddDetailTag = () => {
@@ -432,6 +438,25 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     addTagToSelected(normalized, tagManagerColor);
     setDetailTagQuery('');
     setDetailTagSearchOpen(false);
+    setDetailTagActiveIndex(0);
+  };
+
+  const reorderCategories = (from: string, to: string) => {
+    if (from === to) {
+      return;
+    }
+
+    setCategories((prev) => {
+      const fromIndex = prev.indexOf(from);
+      const toIndex = prev.indexOf(to);
+      if (fromIndex === -1 || toIndex === -1) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
   };
 
   return (
@@ -471,13 +496,50 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               <input
                 className={styles.tagInput}
                 value={toolbarTagQuery}
-                onChange={(event) => setToolbarTagQuery(event.target.value)}
+                onChange={(event) => {
+                  setToolbarTagQuery(event.target.value);
+                  setToolbarTagActiveIndex(0);
+                }}
                 placeholder="输入标签名进行搜索"
                 autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    const nextIndex = Math.min(toolbarTagActiveIndex + 1, Math.max(toolbarTagCandidates.length - 1, 0));
+                    setToolbarTagActiveIndex(nextIndex);
+                  }
+
+                  if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const nextIndex = Math.max(toolbarTagActiveIndex - 1, 0);
+                    setToolbarTagActiveIndex(nextIndex);
+                  }
+
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const active = toolbarTagCandidates[toolbarTagActiveIndex];
+                    if (active) {
+                      toggleTagFilter(active.name);
+                    } else {
+                      createAndUseToolbarTag();
+                    }
+                  }
+
+                  if (event.key === 'Escape') {
+                    setToolbarTagSearchOpen(false);
+                    setToolbarTagQuery('');
+                    setToolbarTagActiveIndex(0);
+                  }
+                }}
               />
               <div className={styles.tagSearchDropdown}>
-                {toolbarTagCandidates.map((tag) => (
-                  <button key={tag.name} className={styles.tagSearchItem} onClick={() => toggleTagFilter(tag.name)}>
+                {toolbarTagCandidates.map((tag, index) => (
+                  <button
+                    key={tag.name}
+                    className={`${styles.tagSearchItem} ${index === toolbarTagActiveIndex ? styles.activeSearchItem : ''}`}
+                    onMouseEnter={() => setToolbarTagActiveIndex(index)}
+                    onClick={() => toggleTagFilter(tag.name)}
+                  >
                     <span className={styles.tagDot} style={{ background: tag.color }} />
                     {activeTagFilters.includes(tag.name) ? '取消筛选' : '按标签筛选'}：{tag.name}
                   </button>
@@ -518,6 +580,32 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               <div key={folder.key} className={styles.folderBlock}>
                 <button
                   className={`${styles.folderHeader} ${selectedFolder === folder.key ? styles.folderHeaderActive : ''}`}
+                  draggable={folder.key !== 'all' && folder.key !== UNCATEGORIZED_KEY}
+                  onDragStart={() => {
+                    if (folder.key !== 'all' && folder.key !== UNCATEGORIZED_KEY) {
+                      setDraggingCategory(folder.key);
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    if (!draggingCategory || draggingCategory === folder.key) {
+                      return;
+                    }
+                    if (folder.key === 'all' || folder.key === UNCATEGORIZED_KEY) {
+                      return;
+                    }
+                    event.preventDefault();
+                  }}
+                  onDrop={() => {
+                    if (!draggingCategory) {
+                      return;
+                    }
+                    if (folder.key === 'all' || folder.key === UNCATEGORIZED_KEY) {
+                      return;
+                    }
+                    reorderCategories(draggingCategory, folder.key);
+                    setDraggingCategory(null);
+                  }}
+                  onDragEnd={() => setDraggingCategory(null)}
                   onClick={() => {
                     setSelectedFolder(folder.key);
                     setExpandedFolders((prev) => {
@@ -732,13 +820,48 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                     value={detailTagQuery}
                     placeholder="搜索标签或输入后创建"
                     autoFocus
-                    onChange={(event) => setDetailTagQuery(event.target.value)}
+                    onChange={(event) => {
+                      setDetailTagQuery(event.target.value);
+                      setDetailTagActiveIndex(0);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        const nextIndex = Math.min(detailTagActiveIndex + 1, Math.max(detailTagCandidates.length - 1, 0));
+                        setDetailTagActiveIndex(nextIndex);
+                      }
+
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        const nextIndex = Math.max(detailTagActiveIndex - 1, 0);
+                        setDetailTagActiveIndex(nextIndex);
+                      }
+
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        const active = detailTagCandidates[detailTagActiveIndex];
+                        if (active) {
+                          addTagToSelected(active.name, active.color);
+                          setDetailTagQuery('');
+                          setDetailTagSearchOpen(false);
+                        } else {
+                          createAndAddDetailTag();
+                        }
+                      }
+
+                      if (event.key === 'Escape') {
+                        setDetailTagSearchOpen(false);
+                        setDetailTagQuery('');
+                        setDetailTagActiveIndex(0);
+                      }
+                    }}
                   />
                   <div className={styles.tagSearchDropdown}>
-                    {detailTagCandidates.map((tag) => (
+                    {detailTagCandidates.map((tag, index) => (
                       <button
                         key={tag.name}
-                        className={styles.tagSearchItem}
+                        className={`${styles.tagSearchItem} ${index === detailTagActiveIndex ? styles.activeSearchItem : ''}`}
+                        onMouseEnter={() => setDetailTagActiveIndex(index)}
                         onClick={() => {
                           addTagToSelected(tag.name, tag.color);
                           setDetailTagQuery('');
