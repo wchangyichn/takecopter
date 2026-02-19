@@ -27,7 +27,8 @@
   display: inline-block;
   padding: 8px 12px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--slate-100);
+  color: var(--slate-700);
   font-size: 12px;
 }
 
@@ -39,7 +40,7 @@
 
 .actionCard h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--text-xl);
 }
 
 .actionCard p {
@@ -52,6 +53,24 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .page {
+    background: radial-gradient(circle at 20% 20%, rgba(251, 146, 60, 0.18), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(45, 212, 191, 0.16), transparent 45%),
+      var(--slate-900);
+  }
+
+  .header p,
+  .actionCard p {
+    color: var(--slate-300);
+  }
+
+  .defaultPath {
+    background: var(--slate-800);
+    color: var(--slate-200);
+  }
 }
 
 @media (max-width: 768px) {

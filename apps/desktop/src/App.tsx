@@ -1,7 +1,7 @@
 import { useAppState } from './hooks/useAppState';
 import { useProjectData } from './hooks/useProjectData';
 import { AppShell } from './components/layout';
-import { HomeView, SettingView, CreateView, ProjectSetupView } from './views';
+import { HomeView, SettingView, CreateView, ProjectSetupView, RenameStoryDialog } from './views';
 import { useState } from 'react';
 import './index.css';
 
@@ -12,9 +12,12 @@ function App() {
     getWorkspaceCards,
     getWorkspaceTree,
     createStory,
+    renameStory,
     saveSettingCards,
     saveTreeData,
     exportProjectFile,
+    exportStoryFile,
+    backupLocalDatabase,
     importProjectFile,
     openStoryFolder,
     openStoryDatabase,
@@ -28,6 +31,8 @@ function App() {
     bootError,
   } = useProjectData();
   const [isSetupBusy, setIsSetupBusy] = useState(false);
+  const [showProjectGuide, setShowProjectGuide] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
 
   const handleStorySelect = (id: string) => {
     selectStory(id);
@@ -38,6 +43,14 @@ function App() {
     const storyId = await createStory();
     selectStory(storyId);
     setView('setting');
+  };
+
+  const handleRenameStory = (storyId: string) => {
+    const current = stories.find((item) => item.id === storyId);
+    if (!current) {
+      return;
+    }
+    setRenameTarget({ id: current.id, title: current.title });
   };
 
   const handleImportProject = async (file: File) => {
@@ -70,6 +83,26 @@ function App() {
     }
   };
 
+  const handleExportStory = async (storyId: string) => {
+    try {
+      await exportStoryFile(storyId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '导出故事失败');
+    }
+  };
+
+  const handleBackupLocalDatabase = async () => {
+    try {
+      await backupLocalDatabase();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '备份失败');
+    }
+  };
+
+  const handleRelinkLocalDatabase = () => {
+    setShowProjectGuide(true);
+  };
+
   const handlePickProjectPath = async () => {
     try {
       return await pickProjectPath();
@@ -83,6 +116,7 @@ function App() {
     try {
       setIsSetupBusy(true);
       await setupProjectWithDefaultPath();
+      setShowProjectGuide(false);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : '创建项目失败');
     } finally {
@@ -99,6 +133,7 @@ function App() {
     try {
       setIsSetupBusy(true);
       await setupProjectAtPath(path);
+      setShowProjectGuide(false);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : '创建项目失败');
     } finally {
@@ -115,6 +150,7 @@ function App() {
     try {
       setIsSetupBusy(true);
       await openProjectAtPath(path);
+      setShowProjectGuide(false);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : '导入项目目录失败，请检查目录结构后重试');
     } finally {
@@ -139,9 +175,13 @@ function App() {
             onStorySelect={handleStorySelect}
             onCreateStory={handleCreateStory}
             onExportProject={exportProjectFile}
+            onBackupLocalDatabase={handleBackupLocalDatabase}
+            onRelinkLocalDatabase={handleRelinkLocalDatabase}
             onImportProject={handleImportProject}
             onOpenStoryFolder={handleOpenStoryFolder}
             onOpenStoryDatabase={handleOpenStoryDatabase}
+            onExportStory={handleExportStory}
+            onRenameStory={handleRenameStory}
           />
         );
       case 'setting':
@@ -157,9 +197,13 @@ function App() {
             onStorySelect={handleStorySelect}
             onCreateStory={handleCreateStory}
             onExportProject={exportProjectFile}
+            onBackupLocalDatabase={handleBackupLocalDatabase}
+            onRelinkLocalDatabase={handleRelinkLocalDatabase}
             onImportProject={handleImportProject}
             onOpenStoryFolder={handleOpenStoryFolder}
             onOpenStoryDatabase={handleOpenStoryDatabase}
+            onExportStory={handleExportStory}
+            onRenameStory={handleRenameStory}
           />
         );
       case 'create':
@@ -175,9 +219,13 @@ function App() {
             onStorySelect={handleStorySelect}
             onCreateStory={handleCreateStory}
             onExportProject={exportProjectFile}
+            onBackupLocalDatabase={handleBackupLocalDatabase}
+            onRelinkLocalDatabase={handleRelinkLocalDatabase}
             onImportProject={handleImportProject}
             onOpenStoryFolder={handleOpenStoryFolder}
             onOpenStoryDatabase={handleOpenStoryDatabase}
+            onExportStory={handleExportStory}
+            onRenameStory={handleRenameStory}
           />
         );
       default:
@@ -187,9 +235,13 @@ function App() {
             onStorySelect={handleStorySelect}
             onCreateStory={handleCreateStory}
             onExportProject={exportProjectFile}
+            onBackupLocalDatabase={handleBackupLocalDatabase}
+            onRelinkLocalDatabase={handleRelinkLocalDatabase}
             onImportProject={handleImportProject}
             onOpenStoryFolder={handleOpenStoryFolder}
             onOpenStoryDatabase={handleOpenStoryDatabase}
+            onExportStory={handleExportStory}
+            onRenameStory={handleRenameStory}
           />
         );
     }
@@ -225,10 +277,10 @@ function App() {
     );
   }
 
-  if (setupState?.needsSetup) {
+  if ((setupState?.needsSetup ?? false) || showProjectGuide) {
     return (
       <ProjectSetupView
-        defaultRootPath={setupState.defaultRootPath}
+        defaultRootPath={setupState?.defaultRootPath ?? '（加载中）'}
         onCreateDefault={() => {
           void handleCreateWithDefault();
         }}
@@ -244,16 +296,29 @@ function App() {
   }
 
   return (
-    <AppShell
-      currentView={currentView}
-      onViewChange={setView}
-      saveStatus={saveStatus}
-      inStoryWorkspace={inStoryWorkspace}
-      storyTitle={getStoryTitle()}
-      onBackHome={handleBackHome}
-    >
-      {renderView()}
-    </AppShell>
+    <>
+      <AppShell
+        currentView={currentView}
+        onViewChange={setView}
+        saveStatus={saveStatus}
+        inStoryWorkspace={inStoryWorkspace}
+        storyTitle={getStoryTitle()}
+        onBackHome={handleBackHome}
+      >
+        {renderView()}
+      </AppShell>
+      <RenameStoryDialog
+        open={Boolean(renameTarget)}
+        initialTitle={renameTarget?.title ?? ''}
+        onClose={() => setRenameTarget(null)}
+        onConfirm={async (title) => {
+          if (!renameTarget) {
+            return;
+          }
+          await renameStory(renameTarget.id, title);
+        }}
+      />
+    </>
   );
 }
 

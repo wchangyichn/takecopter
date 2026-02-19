@@ -198,6 +198,12 @@
   background: var(--slate-50);
 }
 
+.actionItem:focus-visible,
+.cardAction:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 .actionIcon {
   width: 36px;
   height: 36px;
@@ -298,11 +304,28 @@
     background: var(--slate-700);
   }
 
+  .cardAction {
+    background: var(--slate-700);
+    color: var(--slate-300);
+  }
+
+  .cardAction:hover {
+    background: var(--coral-800);
+    color: var(--coral-200);
+  }
+
   .activityText {
     color: var(--slate-300);
   }
 
   .activityText strong {
     color: var(--slate-100);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storyCard,
+  .cardActions {
+    animation: none;
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { Panel } from '../components/ui';
-import type { SettingCard } from '../types';
+import { Button, Panel } from '../components/ui';
+import type { SettingCard, SettingTag } from '../types';
 import styles from './SettingView.module.css';
 
 const typeLabels: Record<SettingCard['type'], string> = {
@@ -9,6 +9,9 @@ const typeLabels: Record<SettingCard['type'], string> = {
   item: '道具',
   event: '事件',
 };
+
+const typeOrder: SettingCard['type'][] = ['character', 'location', 'item', 'event'];
+const cardPalette = ['var(--coral-400)', 'var(--violet-400)', 'var(--teal-400)', 'var(--amber-400)', 'var(--rose-400)'];
 
 interface DragState {
   id: string;
@@ -23,26 +26,92 @@ interface SettingViewProps {
   onCardsChange: (cards: SettingCard[]) => void;
 }
 
-export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewProps) {
-  const [cards, setCards] = useState<SettingCard[]>(() => sourceCards.map((item) => ({ ...item })));
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => sourceCards[0]?.id ?? null);
-  const [filter, setFilter] = useState<SettingCard['type'] | 'all'>('all');
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const cardsRef = useRef<SettingCard[]>(cards);
+type EditableCard = SettingCard & { tags: SettingTag[] };
 
-  useEffect(() => {
-    cardsRef.current = cards;
+function normalizeCards(cards: SettingCard[]): EditableCard[] {
+  return cards.map((card) => ({
+    ...card,
+    tags: (card.tags ?? []).map((tag) => ({ ...tag })),
+  }));
+}
+
+function uniqueCategories(cards: EditableCard[]): string[] {
+  const set = new Set<string>();
+  cards.forEach((card) => {
+    const category = card.category?.trim();
+    if (category) {
+      set.add(category);
+    }
+  });
+  return Array.from(set);
+}
+
+function allTags(cards: EditableCard[]): SettingTag[] {
+  const map = new Map<string, string>();
+  cards.forEach((card) => {
+    card.tags.forEach((tag) => {
+      if (!map.has(tag.name)) {
+        map.set(tag.name, tag.color);
+      }
+    });
+  });
+
+  return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
+}
+
+function normalizeTagName(value: string): string {
+  return value.trim();
+}
+
+export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewProps) {
+  const [cards, setCards] = useState<EditableCard[]>(() => normalizeCards(sourceCards));
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => sourceCards[0]?.id ?? null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<SettingCard['type'] | 'all'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [newCategory, setNewCategory] = useState('');
+  const [tagNameDraft, setTagNameDraft] = useState('');
+  const [tagColorDraft, setTagColorDraft] = useState('#ff8a6a');
+  const [categories, setCategories] = useState<string[]>(() => uniqueCategories(normalizeCards(sourceCards)));
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const localIdRef = useRef(0);
+  const cardsRef = useRef<EditableCard[]>(cards);
+
+  const selectedCard = useMemo(() => cards.find((item) => item.id === selectedCardId) ?? null, [cards, selectedCardId]);
+  const tagOptions = useMemo(() => allTags(cards), [cards]);
+
+  const totalByType = useMemo(() => {
+    return typeOrder.reduce<Record<SettingCard['type'], number>>((acc, type) => {
+      acc[type] = cards.filter((item) => item.type === type).length;
+      return acc;
+    }, { character: 0, location: 0, item: 0, event: 0 });
   }, [cards]);
 
-  const selectedCard = useMemo(
-    () => cards.find((item) => item.id === selectedCardId) ?? null,
-    [cards, selectedCardId]
-  );
+  const totalByCategory = useMemo(() => {
+    return categories.reduce<Record<string, number>>((acc, category) => {
+      acc[category] = cards.filter((item) => item.category === category).length;
+      return acc;
+    }, {});
+  }, [cards, categories]);
 
-  const filteredCards = useMemo(
-    () => (filter === 'all' ? cards : cards.filter((item) => item.type === filter)),
-    [cards, filter]
-  );
+  const filteredCards = useMemo(() => {
+    return cards.filter((item) => {
+      const matchType = typeFilter === 'all' || item.type === typeFilter;
+      const matchCategory = categoryFilter === 'all' || item.category === categoryFilter;
+      const matchTag = tagFilter === 'all' || item.tags.some((tag) => tag.name === tagFilter);
+      return matchType && matchCategory && matchTag;
+    });
+  }, [cards, categoryFilter, tagFilter, typeFilter]);
+
+  const applyCards = (updater: (prev: EditableCard[]) => EditableCard[]) => {
+    setCards((prev) => {
+      const next = updater(prev);
+      cardsRef.current = next;
+      onCardsChange(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!dragState) {
@@ -53,8 +122,8 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       const deltaX = event.clientX - dragState.startX;
       const deltaY = event.clientY - dragState.startY;
 
-      setCards((prev) =>
-        prev.map((card) => {
+      setCards((prev) => {
+        const next = prev.map((card) => {
           if (card.id !== dragState.id) {
             return card;
           }
@@ -66,14 +135,14 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               y: Math.max(24, dragState.originY + deltaY),
             },
           };
-        })
-      );
+        });
+        cardsRef.current = next;
+        return next;
+      });
     };
 
     const handleUp = () => {
-      if (dragState) {
-        onCardsChange(cardsRef.current);
-      }
+      onCardsChange(cardsRef.current);
       setDragState(null);
     };
 
@@ -86,7 +155,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     };
   }, [dragState, onCardsChange]);
 
-  const onCardMouseDown = (event: ReactMouseEvent<HTMLDivElement>, card: SettingCard) => {
+  const onCardMouseDown = (event: ReactMouseEvent<HTMLDivElement>, card: EditableCard) => {
     if (event.button !== 0) {
       return;
     }
@@ -101,17 +170,176 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     });
   };
 
+  const handleAddCard = () => {
+    const nextIndex = cards.length + 1;
+    localIdRef.current += 1;
+    const created: EditableCard = {
+      id: `card-local-${localIdRef.current}`,
+      title: `空设定 ${nextIndex}`,
+      type: 'event',
+      summary: '',
+      content: '',
+      imageUrl: undefined,
+      category: undefined,
+      tags: [],
+      color: cardPalette[nextIndex % cardPalette.length],
+      position: {
+        x: 120 + (nextIndex % 5) * 56,
+        y: 100 + (nextIndex % 4) * 56,
+      },
+      relations: [],
+    };
+
+    applyCards((prev) => [...prev, created]);
+    setSelectedCardId(created.id);
+  };
+
+  const updateSelectedCard = (updater: (card: EditableCard) => EditableCard) => {
+    if (!selectedCard) {
+      return;
+    }
+
+    applyCards((prev) => prev.map((item) => (item.id === selectedCard.id ? updater(item) : item)));
+  };
+
+  const handleAssignCategory = (category: string) => {
+    if (!selectedCard) {
+      return;
+    }
+
+    const normalized = category.trim();
+    updateSelectedCard((card) => ({ ...card, category: normalized || undefined }));
+    if (normalized && !categories.includes(normalized)) {
+      setCategories((prev) => [...prev, normalized]);
+    }
+  };
+
+  const handleAddCategory = () => {
+    const value = newCategory.trim();
+    if (!value || categories.includes(value)) {
+      return;
+    }
+
+    setCategories((prev) => [...prev, value]);
+    setNewCategory('');
+    if (selectedCard) {
+      handleAssignCategory(value);
+    }
+  };
+
+  const handleUploadImage = async (file: File) => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(new Error('图片读取失败'));
+      reader.readAsDataURL(file);
+    });
+
+    updateSelectedCard((card) => ({
+      ...card,
+      imageUrl: dataUrl,
+    }));
+  };
+
+  const addTagToSelected = (name: string, color: string) => {
+    const normalized = normalizeTagName(name);
+    if (!normalized || !selectedCard) {
+      return;
+    }
+
+    updateSelectedCard((card) => {
+      const exists = card.tags.some((item) => item.name === normalized);
+      if (exists) {
+        return card;
+      }
+
+      return {
+        ...card,
+        tags: [...card.tags, { name: normalized, color }],
+      };
+    });
+  };
+
+  const handleCreateTag = () => {
+    addTagToSelected(tagNameDraft, tagColorDraft);
+    setTagNameDraft('');
+  };
+
+  const handleRemoveTag = (name: string) => {
+    if (!selectedCard) {
+      return;
+    }
+
+    updateSelectedCard((card) => ({
+      ...card,
+      tags: card.tags.filter((tag) => tag.name !== name),
+    }));
+  };
+
+  const handleSetTagColor = (name: string, color: string) => {
+    applyCards((prev) =>
+      prev.map((card) => ({
+        ...card,
+        tags: card.tags.map((tag) => (tag.name === name ? { ...tag, color } : tag)),
+      }))
+    );
+  };
+
   return (
     <div className={styles.container}>
-      <Panel side="left" width="280px" className={styles.listPanel}>
+      <Panel side="left" width="320px" className={styles.listPanel}>
         <div className={styles.panelHeader}>
           <h3>设定卡片</h3>
-          <button className={styles.addButton} aria-label="新建设定卡片">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+          <div className={styles.panelActions}>
+            <Button size="sm" variant="secondary" onClick={() => setSummaryOpen((value) => !value)}>
+              {summaryOpen ? '收起设定汇总' : '设定汇总'}
+            </Button>
+            <button className={styles.addButton} aria-label="新建设定卡片" onClick={handleAddCard}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.toolbox}>
+          <div className={styles.toolboxHeader}>工具栏</div>
+          <div className={styles.toolboxRow}>
+            <input
+              className={styles.tagInput}
+              value={tagNameDraft}
+              onChange={(event) => setTagNameDraft(event.target.value)}
+              placeholder="新增标签名"
+            />
+            <input
+              className={styles.colorInput}
+              type="color"
+              value={tagColorDraft}
+              onChange={(event) => setTagColorDraft(event.target.value)}
+            />
+            <Button size="sm" variant="secondary" onClick={handleCreateTag}>
+              添加标签
+            </Button>
+          </div>
+          <div className={styles.tagFilters}>
+            <button
+              className={`${styles.tagFilter} ${tagFilter === 'all' ? styles.activeTagFilter : ''}`}
+              onClick={() => setTagFilter('all')}
+            >
+              全部标签
+            </button>
+            {tagOptions.map((tag) => (
+              <button
+                key={tag.name}
+                className={`${styles.tagFilter} ${tagFilter === tag.name ? styles.activeTagFilter : ''}`}
+                onClick={() => setTagFilter(tag.name)}
+              >
+                <span className={styles.tagDot} style={{ background: tag.color }} />
+                {tag.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className={styles.filterTabs} role="tablist" aria-label="按类型筛选">
@@ -119,9 +347,9 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
             <button
               key={item}
               role="tab"
-              aria-selected={filter === item}
-              className={`${styles.filterTab} ${filter === item ? styles.active : ''}`}
-              onClick={() => setFilter(item)}
+              aria-selected={typeFilter === item}
+              className={`${styles.filterTab} ${typeFilter === item ? styles.active : ''}`}
+              onClick={() => setTypeFilter(item)}
             >
               {item === 'all' ? '全部' : typeLabels[item]}
             </button>
@@ -139,12 +367,63 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               <span className={styles.listItemDot} style={{ background: card.color }} />
               <div className={styles.listItemContent}>
                 <span className={styles.listItemTitle}>{card.title}</span>
-                <span className={styles.listItemType}>{typeLabels[card.type]}</span>
+                <span className={styles.listItemType}>
+                  {typeLabels[card.type]}
+                  {card.category ? ` · ${card.category}` : ''}
+                </span>
               </div>
             </li>
           ))}
         </ul>
       </Panel>
+
+      {summaryOpen && (
+        <Panel side="left" width="250px" className={styles.summaryPanel}>
+          <div className={styles.summaryHeader}>
+            <h3>设定汇总</h3>
+          </div>
+          <div className={styles.summarySection}>
+            <h4>类型统计</h4>
+            <ul className={styles.summaryList}>
+              {typeOrder.map((type) => (
+                <li key={type} className={styles.summaryItem}>
+                  <span>{typeLabels[type]}</span>
+                  <strong>{totalByType[type]}</strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className={styles.summarySection}>
+            <h4>分类筛选</h4>
+            <div className={styles.categoryFilters}>
+              <button
+                className={`${styles.categoryFilter} ${categoryFilter === 'all' ? styles.activeCategory : ''}`}
+                onClick={() => setCategoryFilter('all')}
+              >
+                全部
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  className={`${styles.categoryFilter} ${categoryFilter === category ? styles.activeCategory : ''}`}
+                  onClick={() => setCategoryFilter(category)}
+                >
+                  {category} ({totalByCategory[category] ?? 0})
+                </button>
+              ))}
+            </div>
+            <div className={styles.categoryCreator}>
+              <input
+                value={newCategory}
+                onChange={(event) => setNewCategory(event.target.value)}
+                placeholder="新分类，例如：阵营A"
+                className={styles.categoryInput}
+              />
+              <Button size="sm" variant="secondary" onClick={handleAddCategory}>添加分类</Button>
+            </div>
+          </div>
+        </Panel>
+      )}
 
       <div className={styles.canvasArea}>
         <div className={styles.canvas}>
@@ -224,44 +503,137 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       </div>
 
       {selectedCard && (
-        <Panel side="right" width="340px" className={styles.detailPanel}>
+        <Panel side="right" width="420px" className={styles.detailPanel}>
           <div className={styles.detailHeader}>
             <span className={styles.detailType} style={{ color: selectedCard.color }}>
               {typeLabels[selectedCard.type]}
             </span>
-            <h2 className={styles.detailTitle}>{selectedCard.title}</h2>
+            <h2 className={styles.detailTitle}>设定详情</h2>
           </div>
 
           <div className={styles.detailSection}>
-            <h4>摘要</h4>
-            <p>{selectedCard.summary}</p>
+            <h4>名称</h4>
+            <input
+              className={styles.detailInput}
+              value={selectedCard.title}
+              onChange={(event) => {
+                const value = event.target.value;
+                updateSelectedCard((card) => ({ ...card, title: value }));
+              }}
+            />
           </div>
 
           <div className={styles.detailSection}>
-            <h4>关联关系（{selectedCard.relations.length}）</h4>
-            {selectedCard.relations.length > 0 ? (
-              <ul className={styles.relationList}>
-                {selectedCard.relations.map((relation) => {
-                  const target = cards.find((item) => item.id === relation.targetId);
-                  return target ? (
-                    <li key={relation.targetId} className={styles.relationItem}>
-                      <span className={styles.relationType}>{relation.type}</span>
-                      <span className={styles.relationTarget}>{target.title}</span>
-                    </li>
-                  ) : null;
-                })}
-              </ul>
-            ) : (
-              <p className={styles.emptyState}>暂无关系</p>
-            )}
+            <h4>卡片分类</h4>
+            <select
+              className={styles.categorySelect}
+              value={selectedCard.category ?? ''}
+              onChange={(event) => handleAssignCategory(event.target.value)}
+            >
+              <option value="">未分类</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className={styles.detailSection}>
             <h4>标签</h4>
-            <div className={styles.tagList}>
-              <span className={styles.tag}>主线</span>
-              <span className={styles.tag}>关键设定</span>
+            <div className={styles.cardTags}>
+              {selectedCard.tags.length > 0 ? (
+                selectedCard.tags.map((tag) => (
+                  <button key={tag.name} className={styles.tagChip} onClick={() => handleRemoveTag(tag.name)}>
+                    <span className={styles.tagDot} style={{ background: tag.color }} />
+                    {tag.name}
+                    <span className={styles.tagRemove}>×</span>
+                  </button>
+                ))
+              ) : (
+                <p className={styles.emptyState}>无标签</p>
+              )}
             </div>
+            {tagOptions.length > 0 && (
+              <div className={styles.tagPalette}>
+                {tagOptions.map((tag) => (
+                  <div key={tag.name} className={styles.tagPaletteItem}>
+                    <button className={styles.tagFilter} onClick={() => addTagToSelected(tag.name, tag.color)}>
+                      <span className={styles.tagDot} style={{ background: tag.color }} />
+                      {tag.name}
+                    </button>
+                    <input
+                      className={styles.colorInput}
+                      type="color"
+                      value={tag.color}
+                      onChange={(event) => handleSetTagColor(tag.name, event.target.value)}
+                      aria-label={`调整标签 ${tag.name} 颜色`}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.detailSection}>
+            <h4>摘要</h4>
+            <textarea
+              className={styles.detailTextarea}
+              rows={3}
+              value={selectedCard.summary}
+              onChange={(event) => {
+                const value = event.target.value;
+                updateSelectedCard((card) => ({ ...card, summary: value }));
+              }}
+            />
+          </div>
+
+          <div className={styles.detailSection}>
+            <h4>详细内容</h4>
+            <textarea
+              className={styles.detailTextarea}
+              rows={6}
+              value={selectedCard.content ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                updateSelectedCard((card) => ({ ...card, content: value }));
+              }}
+            />
+          </div>
+
+          <div className={styles.detailSection}>
+            <h4>图片素材</h4>
+            <label className={styles.uploadButton}>
+              上传图片
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleUploadImage(file);
+                    event.currentTarget.value = '';
+                  }
+                }}
+              />
+            </label>
+            {selectedCard.imageUrl ? (
+              <div className={styles.imagePreviewWrap}>
+                <img src={selectedCard.imageUrl} alt={`${selectedCard.title} 预览`} className={styles.imagePreview} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    updateSelectedCard((card) => ({ ...card, imageUrl: undefined }));
+                  }}
+                >
+                  移除图片
+                </Button>
+              </div>
+            ) : (
+              <p className={styles.emptyState}>未上传图片</p>
+            )}
           </div>
 
           <button className={styles.closeDetail} onClick={() => setSelectedCardId(null)} aria-label="关闭详情">

@@ -1,0 +1,70 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-overlay);
+}
+
+.dialog {
+  width: min(460px, 100%);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+}
+
+.description {
+  margin: 8px 0 0;
+  color: var(--slate-600);
+}
+
+.label {
+  margin-top: 16px;
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--slate-700);
+}
+
+.input {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--slate-800);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  font-size: var(--text-base);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .description {
+    color: var(--slate-300);
+  }
+
+  .label {
+    color: var(--slate-200);
+  }
+
+  .input {
+    border-color: var(--slate-600);
+    background: var(--slate-900);
+    color: var(--slate-100);
+  }
+}

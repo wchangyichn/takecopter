@@ -9,9 +9,12 @@ interface UseProjectDataResult {
   getWorkspaceCards: (storyId: string | null) => SettingCard[];
   getWorkspaceTree: (storyId: string | null) => TreeNode[];
   createStory: (title?: string) => Promise<string>;
+  renameStory: (storyId: string, title: string) => Promise<void>;
   saveSettingCards: (storyId: string, cards: SettingCard[]) => Promise<void>;
   saveTreeData: (storyId: string, tree: TreeNode[]) => Promise<void>;
   exportProjectFile: () => Promise<void>;
+  exportStoryFile: (storyId: string) => Promise<void>;
+  backupLocalDatabase: () => Promise<void>;
   importProjectFile: (file: File) => Promise<void>;
   openStoryFolder: (storyId: string) => Promise<void>;
   openStoryDatabase: (storyId: string) => Promise<void>;
@@ -142,6 +145,15 @@ export function useProjectData(): UseProjectDataResult {
     [projectData.stories.length, repository, runMutation]
   );
 
+  const renameStory = useCallback(
+    async (storyId: string, title: string) => {
+      await runMutation(async () => {
+        await repository.renameStory(storyId, title);
+      });
+    },
+    [repository, runMutation]
+  );
+
   const saveSettingCards = useCallback(
     async (storyId: string, cards: SettingCard[]) => {
       await runMutation(async () => {
@@ -161,6 +173,12 @@ export function useProjectData(): UseProjectDataResult {
   );
 
   const exportProjectFile = useCallback(async () => {
+    if (isTauriRuntime()) {
+      const folder = await repository.exportProjectToLocal();
+      window.alert(`已导出项目并打开目录：${folder}`);
+      return;
+    }
+
     const payload = await repository.exportProject();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -169,6 +187,31 @@ export function useProjectData(): UseProjectDataResult {
     anchor.download = `takecopter-project-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }, [repository]);
+
+  const exportStoryFile = useCallback(
+    async (storyId: string) => {
+      if (isTauriRuntime()) {
+        const folder = await repository.exportStoryToLocal(storyId);
+        window.alert(`已导出故事并打开目录：${folder}`);
+        return;
+      }
+
+      const payload = await repository.exportStory(storyId);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `takecopter-story-${payload.story.id}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    [repository]
+  );
+
+  const backupLocalDatabase = useCallback(async () => {
+    const folder = await repository.backupLocalDatabase();
+    window.alert(`备份完成，已打开目录：${folder}`);
   }, [repository]);
 
   const importProjectFile = useCallback(
@@ -275,9 +318,12 @@ export function useProjectData(): UseProjectDataResult {
     getWorkspaceCards,
     getWorkspaceTree,
     createStory,
+    renameStory,
     saveSettingCards,
     saveTreeData,
     exportProjectFile,
+    exportStoryFile,
+    backupLocalDatabase,
     importProjectFile,
     openStoryFolder,
     openStoryDatabase,

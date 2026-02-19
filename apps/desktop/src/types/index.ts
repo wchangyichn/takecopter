@@ -13,9 +13,18 @@ export interface SettingCard {
   title: string;
   type: 'character' | 'location' | 'item' | 'event';
   summary: string;
+  content?: string;
+  imageUrl?: string;
+  category?: string;
+  tags?: SettingTag[];
   color: string;
   position: { x: number; y: number };
   relations: { targetId: string; type: string }[];
+}
+
+export interface SettingTag {
+  name: string;
+  color: string;
 }
 
 export interface TreeNode {

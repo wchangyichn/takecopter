@@ -89,6 +89,22 @@ struct ProjectManifest {
   app: String,
   schema_version: i64,
   created_at: String,
+  stories: Vec<StoryManifestEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoryManifestEntry {
+  story: Story,
+  folder_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyProjectManifest {
+  app: String,
+  schema_version: i64,
+  created_at: String,
   stories: Vec<Story>,
 }
 
@@ -143,12 +159,39 @@ fn stories_root(root: &Path) -> PathBuf {
   root.join("stories")
 }
 
-fn story_root(root: &Path, story_id: &str) -> PathBuf {
-  stories_root(root).join(story_id)
+fn slugify_story_title(title: &str) -> String {
+  let mut slug = String::new();
+  let mut last_dash = false;
+
+  for ch in title.chars() {
+    if ch.is_ascii_alphanumeric() {
+      slug.push(ch.to_ascii_lowercase());
+      last_dash = false;
+    } else if !last_dash {
+      slug.push('-');
+      last_dash = true;
+    }
+  }
+
+  let slug = slug.trim_matches('-').to_string();
+  if slug.is_empty() {
+    "story".to_string()
+  } else {
+    slug
+  }
 }
 
-fn story_db_path(root: &Path, story_id: &str) -> PathBuf {
-  story_root(root, story_id).join("story.db")
+fn make_story_folder_name(title: &str, story_id: &str) -> String {
+  let short_id = story_id.chars().take(8).collect::<String>();
+  format!("{}-{}", slugify_story_title(title), short_id)
+}
+
+fn story_root(root: &Path, folder_name: &str) -> PathBuf {
+  stories_root(root).join(folder_name)
+}
+
+fn story_db_path(root: &Path, folder_name: &str) -> PathBuf {
+  story_root(root, folder_name).join("story.db")
 }
 
 fn ensure_root_layout(root: &Path) -> Result<(), String> {
@@ -177,7 +220,25 @@ fn ensure_root_layout(root: &Path) -> Result<(), String> {
 fn read_manifest(root: &Path) -> Result<ProjectManifest, String> {
   let path = project_manifest_path(root);
   let raw = fs::read_to_string(path).map_err(|error| format!("读取项目元信息失败: {error}"))?;
-  let manifest = serde_json::from_str::<ProjectManifest>(&raw).map_err(|error| format!("解析项目元信息失败: {error}"))?;
+  let manifest = match serde_json::from_str::<ProjectManifest>(&raw) {
+    Ok(current) => current,
+    Err(_) => {
+      let legacy = serde_json::from_str::<LegacyProjectManifest>(&raw).map_err(|error| format!("解析项目元信息失败: {error}"))?;
+      ProjectManifest {
+        app: legacy.app,
+        schema_version: legacy.schema_version,
+        created_at: legacy.created_at,
+        stories: legacy
+          .stories
+          .into_iter()
+          .map(|story| StoryManifestEntry {
+            folder_name: make_story_folder_name(&story.title, &story.id),
+            story,
+          })
+          .collect(),
+      }
+    }
+  };
   if manifest.app != "takecopter" {
     return Err("无效的项目目录来源".to_string());
   }
@@ -187,14 +248,6 @@ fn read_manifest(root: &Path) -> Result<ProjectManifest, String> {
 fn write_manifest(root: &Path, manifest: &ProjectManifest) -> Result<(), String> {
   let raw = serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?;
   fs::write(project_manifest_path(root), raw).map_err(|error| format!("写入项目元信息失败: {error}"))
-}
-
-fn update_story_metadata(manifest: &mut ProjectManifest, story: Story) {
-  if let Some(index) = manifest.stories.iter().position(|item| item.id == story.id) {
-    manifest.stories[index] = story;
-  } else {
-    manifest.stories.push(story);
-  }
 }
 
 fn open_story_db(path: &Path) -> Result<Connection, String> {
@@ -265,20 +318,36 @@ fn write_workspace(path: &Path, workspace: &Workspace) -> Result<(), String> {
   Ok(())
 }
 
+fn find_story_entry<'a>(manifest: &'a ProjectManifest, story_id: &str) -> Option<&'a StoryManifestEntry> {
+  manifest.stories.iter().find(|item| item.story.id == story_id)
+}
+
+fn find_story_entry_mut<'a>(manifest: &'a mut ProjectManifest, story_id: &str) -> Option<&'a mut StoryManifestEntry> {
+  manifest.stories.iter_mut().find(|item| item.story.id == story_id)
+}
+
 fn load_project_data(root: &Path) -> Result<ProjectData, String> {
   let mut manifest = read_manifest(root)?;
-  manifest
-    .stories
-    .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+  manifest.stories.sort_by(|a, b| b.story.updated_at.cmp(&a.story.updated_at));
 
   let mut workspaces = std::collections::HashMap::new();
-  for story in &manifest.stories {
-    let workspace = read_workspace(&story_db_path(root, &story.id))?;
-    workspaces.insert(story.id.clone(), workspace);
+  for entry in &manifest.stories {
+    let db_path = story_db_path(root, &entry.folder_name);
+    let legacy_db_path = stories_root(root).join(&entry.story.id).join("story.db");
+
+    if !db_path.exists() && legacy_db_path.exists() {
+      if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("迁移故事目录失败: {error}"))?;
+      }
+      fs::rename(&legacy_db_path, &db_path).map_err(|error| format!("迁移故事数据库失败: {error}"))?;
+    }
+
+    let workspace = read_workspace(&db_path)?;
+    workspaces.insert(entry.story.id.clone(), workspace);
   }
 
   Ok(ProjectData {
-    stories: manifest.stories,
+    stories: manifest.stories.into_iter().map(|item| item.story).collect(),
     workspaces,
   })
 }
@@ -329,6 +398,21 @@ fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
   cmd.status()
     .map_err(|error| format!("打开路径失败: {error}"))
     .and_then(|status| if status.success() { Ok(()) } else { Err("打开路径失败".to_string()) })
+}
+
+fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
+  fs::create_dir_all(to).map_err(|error| format!("创建备份目录失败: {error}"))?;
+  for entry in fs::read_dir(from).map_err(|error| format!("读取目录失败: {error}"))? {
+    let entry = entry.map_err(|error| format!("读取目录失败: {error}"))?;
+    let src = entry.path();
+    let dst = to.join(entry.file_name());
+    if src.is_dir() {
+      copy_dir_recursive(&src, &dst)?;
+    } else {
+      fs::copy(&src, &dst).map_err(|error| format!("复制文件失败: {error}"))?;
+    }
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -418,17 +502,59 @@ pub fn create_story(app: AppHandle, state: State<ProjectState>, input: CreateSto
     updated_at: now,
     cover_color: colors[index].to_string(),
   };
+  let folder_name = make_story_folder_name(&story.title, &story.id);
 
   let workspace = Workspace {
     settings: vec![],
     tree: vec![],
   };
-  write_workspace(&story_db_path(&root, &story.id), &workspace)?;
+  write_workspace(&story_db_path(&root, &folder_name), &workspace)?;
 
-  update_story_metadata(&mut manifest, story.clone());
+  manifest.stories.push(StoryManifestEntry {
+    story: story.clone(),
+    folder_name,
+  });
   write_manifest(&root, &manifest)?;
 
   Ok(story)
+}
+
+#[tauri::command]
+pub fn rename_story(app: AppHandle, state: State<ProjectState>, story_id: String, title: String) -> Result<Story, String> {
+  let clean_title = title.trim();
+  if clean_title.is_empty() {
+    return Err("故事名称不能为空".to_string());
+  }
+
+  let root = require_active_root(&app, &state)?;
+  let mut manifest = read_manifest(&root)?;
+  let updated_story = {
+    let Some(entry) = find_story_entry_mut(&mut manifest, &story_id) else {
+      return Err("故事不存在".to_string());
+    };
+
+    let old_folder_name = entry.folder_name.clone();
+    let next_folder_name = make_story_folder_name(clean_title, &story_id);
+
+    if old_folder_name != next_folder_name {
+      let old_path = story_root(&root, &old_folder_name);
+      let next_path = story_root(&root, &next_folder_name);
+      if old_path.exists() {
+        if next_path.exists() {
+          return Err("目标故事目录已存在，请使用其他名称".to_string());
+        }
+        fs::rename(&old_path, &next_path).map_err(|error| format!("重命名故事目录失败: {error}"))?;
+      }
+      entry.folder_name = next_folder_name;
+    }
+
+    entry.story.title = clean_title.to_string();
+    entry.story.updated_at = now_rfc3339();
+    entry.story.clone()
+  };
+
+  write_manifest(&root, &manifest)?;
+  Ok(updated_story)
 }
 
 #[tauri::command]
@@ -440,18 +566,18 @@ pub fn update_settings(
 ) -> Result<(), String> {
   let root = require_active_root(&app, &state)?;
   let mut manifest = read_manifest(&root)?;
-  let Some(story) = manifest.stories.iter_mut().find(|item| item.id == story_id) else {
+  let Some(entry) = find_story_entry_mut(&mut manifest, &story_id) else {
     return Err("故事不存在".to_string());
   };
 
-  let current = read_workspace(&story_db_path(&root, &story_id))?;
+  let current = read_workspace(&story_db_path(&root, &entry.folder_name))?;
   let next = Workspace {
     settings,
     tree: current.tree,
   };
-  write_workspace(&story_db_path(&root, &story_id), &next)?;
+  write_workspace(&story_db_path(&root, &entry.folder_name), &next)?;
 
-  story.updated_at = now_rfc3339();
+  entry.story.updated_at = now_rfc3339();
   write_manifest(&root, &manifest)
 }
 
@@ -464,18 +590,18 @@ pub fn update_tree(
 ) -> Result<(), String> {
   let root = require_active_root(&app, &state)?;
   let mut manifest = read_manifest(&root)?;
-  let Some(story) = manifest.stories.iter_mut().find(|item| item.id == story_id) else {
+  let Some(entry) = find_story_entry_mut(&mut manifest, &story_id) else {
     return Err("故事不存在".to_string());
   };
 
-  let current = read_workspace(&story_db_path(&root, &story_id))?;
+  let current = read_workspace(&story_db_path(&root, &entry.folder_name))?;
   let next = Workspace {
     settings: current.settings,
     tree,
   };
-  write_workspace(&story_db_path(&root, &story_id), &next)?;
+  write_workspace(&story_db_path(&root, &entry.folder_name), &next)?;
 
-  story.updated_at = now_rfc3339();
+  entry.story.updated_at = now_rfc3339();
   write_manifest(&root, &manifest)
 }
 
@@ -493,6 +619,61 @@ pub fn export_project(app: AppHandle, state: State<ProjectState>) -> Result<Expo
 }
 
 #[tauri::command]
+pub fn export_story(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<ExportedStoryData, String> {
+  let root = require_active_root(&app, &state)?;
+  let manifest = read_manifest(&root)?;
+  let Some(entry) = find_story_entry(&manifest, &story_id) else {
+    return Err("故事不存在".to_string());
+  };
+
+  let workspace = read_workspace(&story_db_path(&root, &entry.folder_name))?;
+  Ok(ExportedStoryData {
+    app: "takecopter".to_string(),
+    schema_version: CURRENT_SCHEMA_VERSION,
+    exported_at: now_rfc3339(),
+    story: entry.story.clone(),
+    workspace,
+  })
+}
+
+#[tauri::command]
+pub fn export_project_to_local(app: AppHandle, state: State<ProjectState>) -> Result<String, String> {
+  let root = require_active_root(&app, &state)?;
+  let payload = export_project(app, state)?;
+  let export_dir = root.join("exports");
+  fs::create_dir_all(&export_dir).map_err(|error| format!("创建导出目录失败: {error}"))?;
+  let file_path = export_dir.join(format!("takecopter-project-{}.json", Utc::now().format("%Y%m%d-%H%M%S")));
+  let raw = serde_json::to_vec_pretty(&payload).map_err(|error| error.to_string())?;
+  fs::write(&file_path, raw).map_err(|error| format!("写入导出文件失败: {error}"))?;
+  open_path_in_file_manager(&export_dir)?;
+  Ok(export_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn export_story_to_local(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<String, String> {
+  let root = require_active_root(&app, &state)?;
+  let payload = export_story(app, state, story_id)?;
+  let export_dir = root.join("exports");
+  fs::create_dir_all(&export_dir).map_err(|error| format!("创建导出目录失败: {error}"))?;
+  let file_path = export_dir.join(format!("takecopter-story-{}-{}.json", payload.story.id, Utc::now().format("%Y%m%d-%H%M%S")));
+  let raw = serde_json::to_vec_pretty(&payload).map_err(|error| error.to_string())?;
+  fs::write(&file_path, raw).map_err(|error| format!("写入导出文件失败: {error}"))?;
+  open_path_in_file_manager(&export_dir)?;
+  Ok(export_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn backup_local_database(app: AppHandle, state: State<ProjectState>) -> Result<String, String> {
+  let root = require_active_root(&app, &state)?;
+  let export_dir = root.join("exports");
+  fs::create_dir_all(&export_dir).map_err(|error| format!("创建备份目录失败: {error}"))?;
+  let backup_dir = export_dir.join(format!("backup-{}", Utc::now().format("%Y%m%d-%H%M%S")));
+  copy_dir_recursive(&root, &backup_dir)?;
+  open_path_in_file_manager(&backup_dir)?;
+  Ok(backup_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub fn import_project(app: AppHandle, state: State<ProjectState>, payload: ExportedProjectData) -> Result<(), String> {
   if payload.app != "takecopter" {
     return Err("无效的项目文件来源".to_string());
@@ -505,15 +686,23 @@ pub fn import_project(app: AppHandle, state: State<ProjectState>, payload: Expor
   ensure_root_layout(&root)?;
 
   let mut manifest = read_manifest(&root)?;
-  manifest.stories = payload.data.stories.clone();
+  manifest.stories = payload
+    .data
+    .stories
+    .iter()
+    .map(|story| StoryManifestEntry {
+      story: story.clone(),
+      folder_name: make_story_folder_name(&story.title, &story.id),
+    })
+    .collect();
   write_manifest(&root, &manifest)?;
 
-  for story in &payload.data.stories {
-    let workspace = payload.data.workspaces.get(&story.id).cloned().unwrap_or(Workspace {
+  for entry in &manifest.stories {
+    let workspace = payload.data.workspaces.get(&entry.story.id).cloned().unwrap_or(Workspace {
       settings: vec![],
       tree: vec![],
     });
-    write_workspace(&story_db_path(&root, &story.id), &workspace)?;
+    write_workspace(&story_db_path(&root, &entry.folder_name), &workspace)?;
   }
 
   Ok(())
@@ -532,27 +721,42 @@ pub fn import_story(app: AppHandle, state: State<ProjectState>, payload: Exporte
   ensure_root_layout(&root)?;
 
   let mut manifest = read_manifest(&root)?;
-  update_story_metadata(&mut manifest, payload.story.clone());
+  let folder_name = if let Some(existing) = find_story_entry(&manifest, &payload.story.id) {
+    existing.folder_name.clone()
+  } else {
+    make_story_folder_name(&payload.story.title, &payload.story.id)
+  };
+
+  if let Some(entry) = find_story_entry_mut(&mut manifest, &payload.story.id) {
+    entry.story = payload.story.clone();
+    entry.folder_name = folder_name.clone();
+  } else {
+    manifest.stories.push(StoryManifestEntry {
+      story: payload.story.clone(),
+      folder_name: folder_name.clone(),
+    });
+  }
+
   write_manifest(&root, &manifest)?;
-  write_workspace(&story_db_path(&root, &payload.story.id), &payload.workspace)
+  write_workspace(&story_db_path(&root, &folder_name), &payload.workspace)
 }
 
 #[tauri::command]
 pub fn open_story_folder(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<(), String> {
   let root = require_active_root(&app, &state)?;
   let manifest = read_manifest(&root)?;
-  if !manifest.stories.iter().any(|item| item.id == story_id) {
+  let Some(entry) = find_story_entry(&manifest, &story_id) else {
     return Err("故事不存在".to_string());
-  }
-  open_path_in_file_manager(&story_root(&root, &story_id))
+  };
+  open_path_in_file_manager(&story_root(&root, &entry.folder_name))
 }
 
 #[tauri::command]
 pub fn open_story_database(app: AppHandle, state: State<ProjectState>, story_id: String) -> Result<(), String> {
   let root = require_active_root(&app, &state)?;
   let manifest = read_manifest(&root)?;
-  if !manifest.stories.iter().any(|item| item.id == story_id) {
+  let Some(entry) = find_story_entry(&manifest, &story_id) else {
     return Err("故事不存在".to_string());
-  }
-  open_path_in_file_manager(&story_db_path(&root, &story_id))
+  };
+  open_path_in_file_manager(&story_db_path(&root, &entry.folder_name))
 }

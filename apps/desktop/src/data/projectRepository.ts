@@ -352,6 +352,34 @@ export class ProjectRepository implements ProjectDataRepository {
     return story;
   }
 
+  async renameStory(storyId: string, title: string): Promise<Story> {
+    const db = await this.getDb();
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      throw new Error('故事名称不能为空');
+    }
+
+    const result = db.exec(`SELECT id, title, description, updated_at, cover_color FROM stories WHERE id = ${sqlText(storyId)} LIMIT 1`);
+    const row = result[0]?.values[0];
+    if (!row) {
+      throw new Error('故事不存在');
+    }
+
+    const updatedAt = new Date();
+    db.exec(
+      `UPDATE stories SET title = ${sqlText(cleanTitle)}, updated_at = ${sqlText(updatedAt.toISOString())} WHERE id = ${sqlText(storyId)}`
+    );
+    await this.persist(db);
+
+    return {
+      id: String(row[0]),
+      title: cleanTitle,
+      description: String(row[2]),
+      coverColor: String(row[4]),
+      updatedAt,
+    };
+  }
+
   async updateSettings(storyId: string, settings: SettingCard[]): Promise<void> {
     const db = await this.getDb();
     db.exec('BEGIN');
@@ -390,6 +418,35 @@ export class ProjectRepository implements ProjectDataRepository {
       exportedAt: new Date().toISOString(),
       data,
     };
+  }
+
+  async exportStory(storyId: string): Promise<ExportedStoryData> {
+    const data = await this.load();
+    const story = data.stories.find((item) => item.id === storyId);
+    if (!story) {
+      throw new Error('故事不存在');
+    }
+
+    return {
+      app: 'takecopter',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      story,
+      workspace: data.workspaces[story.id] ?? { settings: [], tree: [] },
+    };
+  }
+
+  async exportProjectToLocal(): Promise<string> {
+    throw new Error('Web 端不支持本地导出目录，请在桌面端使用该功能');
+  }
+
+  async exportStoryToLocal(storyId: string): Promise<string> {
+    void storyId;
+    throw new Error('Web 端不支持本地导出目录，请在桌面端使用该功能');
+  }
+
+  async backupLocalDatabase(): Promise<string> {
+    throw new Error('Web 端不支持本地数据库备份，请在桌面端使用该功能');
   }
 
   async importProject(payload: ExportedProjectData): Promise<void> {

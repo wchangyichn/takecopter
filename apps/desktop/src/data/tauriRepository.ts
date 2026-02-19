@@ -93,6 +93,11 @@ class TauriRepository implements ProjectDataRepository {
     return hydrateStory(story);
   }
 
+  async renameStory(storyId: string, title: string): Promise<Story> {
+    const story = await invoke<SerializedStory>('rename_story', { storyId, title });
+    return hydrateStory(story);
+  }
+
   async updateSettings(storyId: string, settings: SettingCard[]): Promise<void> {
     await invoke('update_settings', { storyId, settings });
   }
@@ -103,6 +108,22 @@ class TauriRepository implements ProjectDataRepository {
 
   async exportProject(): Promise<ExportedProjectData> {
     return invoke<ExportedProjectData>('export_project');
+  }
+
+  async exportStory(storyId: string): Promise<ExportedStoryData> {
+    return invoke<ExportedStoryData>('export_story', { storyId });
+  }
+
+  async exportProjectToLocal(): Promise<string> {
+    return invoke<string>('export_project_to_local');
+  }
+
+  async exportStoryToLocal(storyId: string): Promise<string> {
+    return invoke<string>('export_story_to_local', { storyId });
+  }
+
+  async backupLocalDatabase(): Promise<string> {
+    return invoke<string>('backup_local_database');
   }
 
   async importProject(payload: ExportedProjectData): Promise<void> {

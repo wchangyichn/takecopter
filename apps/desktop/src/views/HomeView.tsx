@@ -8,9 +8,13 @@ interface HomeViewProps {
   onStorySelect: (id: string) => void;
   onCreateStory: () => void;
   onExportProject: () => void;
+  onBackupLocalDatabase: () => void;
+  onRelinkLocalDatabase: () => void;
   onImportProject: (file: File) => void;
   onOpenStoryFolder: (id: string) => void;
   onOpenStoryDatabase: (id: string) => void;
+  onExportStory: (id: string) => void;
+  onRenameStory: (id: string) => void;
 }
 
 export function HomeView({
@@ -18,9 +22,13 @@ export function HomeView({
   onStorySelect,
   onCreateStory,
   onExportProject,
+  onBackupLocalDatabase,
+  onRelinkLocalDatabase,
   onImportProject,
   onOpenStoryFolder,
   onOpenStoryDatabase,
+  onExportStory,
+  onRenameStory,
 }: HomeViewProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -61,6 +69,8 @@ export function HomeView({
                   formattedDate={formatDate(story.updatedAt)}
                   onOpenStoryFolder={onOpenStoryFolder}
                   onOpenStoryDatabase={onOpenStoryDatabase}
+                  onExportStory={onExportStory}
+                  onRenameStory={onRenameStory}
                 />
               ))}
             </div>
@@ -90,7 +100,7 @@ export function HomeView({
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                 </span>
-                <span>导入故事项目</span>
+                <span>导入故事/项目文件</span>
               </button>
               <button className={styles.actionItem} onClick={() => console.log('Templates')}>
                 <span className={styles.actionIcon} style={{ background: 'var(--violet-100)', color: 'var(--violet-600)' }}>
@@ -109,6 +119,26 @@ export function HomeView({
                   </svg>
                 </span>
                 <span>备份全部项目</span>
+              </button>
+              <button className={styles.actionItem} onClick={onBackupLocalDatabase}>
+                <span className={styles.actionIcon} style={{ background: 'var(--rose-100)', color: 'var(--rose-600)' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <path d="M7 10l5 5 5-5" />
+                    <path d="M12 15V3" />
+                  </svg>
+                </span>
+                <span>备份本机数据库</span>
+              </button>
+              <button className={styles.actionItem} onClick={onRelinkLocalDatabase}>
+                <span className={styles.actionIcon} style={{ background: 'var(--slate-200)', color: 'var(--slate-700)' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 4v6h6" />
+                    <path d="M20 20v-6h-6" />
+                    <path d="M5.64 15A9 9 0 0 0 20 12.36M4 11.64A9 9 0 0 1 18.36 9" />
+                  </svg>
+                </span>
+                <span>重新链接本地数据库</span>
               </button>
             </div>
             <input
@@ -161,6 +191,8 @@ interface StoryCardProps {
   formattedDate: string;
   onOpenStoryFolder: (id: string) => void;
   onOpenStoryDatabase: (id: string) => void;
+  onExportStory: (id: string) => void;
+  onRenameStory: (id: string) => void;
 }
 
 function StoryCard({
@@ -172,6 +204,8 @@ function StoryCard({
   formattedDate,
   onOpenStoryFolder,
   onOpenStoryDatabase,
+  onExportStory,
+  onRenameStory,
 }: StoryCardProps) {
   return (
     <Card
@@ -209,7 +243,36 @@ function StoryCard({
                   onOpenStoryFolder(story.id);
                 }}
               >
-                📁
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                </svg>
+              </button>
+              <button
+                className={styles.cardAction}
+                aria-label="导出单个故事"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExportStory(story.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3v12" />
+                  <path d="M7 10l5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+              </button>
+              <button
+                className={styles.cardAction}
+                aria-label="重命名故事"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameStory(story.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
               </button>
               <button
                 className={styles.cardAction}
@@ -219,7 +282,12 @@ function StoryCard({
                   onOpenStoryDatabase(story.id);
                 }}
               >
-                🗄️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="8" rx="1" />
+                  <rect x="3" y="13" width="18" height="8" rx="1" />
+                  <line x1="8" y1="7" x2="8.01" y2="7" />
+                  <line x1="8" y1="17" x2="8.01" y2="17" />
+                </svg>
               </button>
               <button className={styles.cardAction} aria-label="进入故事页面" onClick={(e) => { e.stopPropagation(); onSelect(story.id); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

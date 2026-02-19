@@ -112,6 +112,8 @@ function clearTakeSelection(nodes: TreeNode[]): TreeNode[] {
 
 export function CreateView({ treeData, onTreeChange }: CreateViewProps) {
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
+  const [isEditingOutline, setIsEditingOutline] = useState(false);
+  const [outlineDraft, setOutlineDraft] = useState(treeData[0]?.title ?? '故事大纲');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => {
     const ids = new Set<string>();
     treeData.slice(0, 1).forEach((root) => {
@@ -134,6 +136,8 @@ export function CreateView({ treeData, onTreeChange }: CreateViewProps) {
       return next;
     });
   };
+
+  const outlineTitle = treeData[0]?.title ?? '故事大纲';
 
   const commitTree = useCallback(
     (next: TreeNode[], nextSelectedId?: string | null) => {
@@ -195,6 +199,34 @@ export function CreateView({ treeData, onTreeChange }: CreateViewProps) {
 
     setExpandedNodes((prev) => new Set(prev).add(selectedId));
     commitTree(next, nextNode.id);
+  };
+
+  const saveOutlineTitle = () => {
+    const nextTitle = outlineDraft.trim();
+    if (!nextTitle) {
+      return;
+    }
+
+    if (treeData.length === 0) {
+      const rootNode: TreeNode = {
+        id: `ep-${Date.now()}`,
+        type: 'ep',
+        title: nextTitle,
+        children: [],
+      };
+      commitTree([rootNode], rootNode.id);
+      setExpandedNodes((prev) => new Set(prev).add(rootNode.id));
+      setIsEditingOutline(false);
+      return;
+    }
+
+    const rootId = treeData[0].id;
+    const next = updateNode(cloneTree(treeData), rootId, (node) => ({
+      ...node,
+      title: nextTitle,
+    }));
+    commitTree(next, rootId);
+    setIsEditingOutline(false);
   };
 
   const handleTitleChange = (value: string) => {
@@ -289,13 +321,41 @@ export function CreateView({ treeData, onTreeChange }: CreateViewProps) {
         </div>
 
         <div className={styles.outlineHeader}>
-          <h4>故事大纲</h4>
-          <button className={styles.outlineEdit} aria-label="编辑大纲">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
+          {isEditingOutline ? (
+            <div className={styles.outlineEditor}>
+              <input
+                value={outlineDraft}
+                onChange={(event) => setOutlineDraft(event.target.value)}
+                className={styles.outlineInput}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    saveOutlineTitle();
+                  }
+                  if (event.key === 'Escape') {
+                    setIsEditingOutline(false);
+                  }
+                }}
+              />
+              <Button size="sm" variant="secondary" onClick={saveOutlineTitle}>保存</Button>
+            </div>
+          ) : (
+            <>
+              <h4>{outlineTitle}</h4>
+              <button
+                className={styles.outlineEdit}
+                aria-label="编辑故事线"
+                onClick={() => {
+                  setOutlineDraft(outlineTitle);
+                  setIsEditingOutline(true);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
 
         <nav className={styles.treeNav} aria-label="故事层级结构">

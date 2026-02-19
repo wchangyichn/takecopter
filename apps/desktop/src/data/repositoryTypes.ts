@@ -36,9 +36,14 @@ export interface ProjectDataRepository {
   openProjectRoot: (rootPath: string) => Promise<void>;
   load: () => Promise<ProjectData>;
   createStory: (input: CreateStoryInput) => Promise<Story>;
+  renameStory: (storyId: string, title: string) => Promise<Story>;
   updateSettings: (storyId: string, settings: SettingCard[]) => Promise<void>;
   updateTree: (storyId: string, tree: TreeNode[]) => Promise<void>;
   exportProject: () => Promise<ExportedProjectData>;
+  exportStory: (storyId: string) => Promise<ExportedStoryData>;
+  exportProjectToLocal: () => Promise<string>;
+  exportStoryToLocal: (storyId: string) => Promise<string>;
+  backupLocalDatabase: () => Promise<string>;
   importProject: (payload: ExportedProjectData) => Promise<void>;
   importStory: (payload: ExportedStoryData) => Promise<void>;
   openStoryFolder: (storyId: string) => Promise<void>;
