@@ -10,8 +10,8 @@ const typeLabels: Record<SettingCard['type'], string> = {
   event: '事件',
 };
 
-const typeOrder: SettingCard['type'][] = ['character', 'location', 'item', 'event'];
 const cardPalette = ['var(--coral-400)', 'var(--violet-400)', 'var(--teal-400)', 'var(--amber-400)', 'var(--rose-400)'];
+const UNCATEGORIZED_KEY = '__uncategorized__';
 
 interface DragState {
   id: string;
@@ -28,6 +28,10 @@ interface SettingViewProps {
 
 type EditableCard = SettingCard & { tags: SettingTag[] };
 
+function normalizeTagName(value: string): string {
+  return value.trim();
+}
+
 function normalizeCards(cards: SettingCard[]): EditableCard[] {
   return cards.map((card) => ({
     ...card,
@@ -35,18 +39,7 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
   }));
 }
 
-function uniqueCategories(cards: EditableCard[]): string[] {
-  const set = new Set<string>();
-  cards.forEach((card) => {
-    const category = card.category?.trim();
-    if (category) {
-      set.add(category);
-    }
-  });
-  return Array.from(set);
-}
-
-function allTags(cards: EditableCard[], extraTags: SettingTag[] = []): SettingTag[] {
+function allTags(cards: EditableCard[], extraTags: SettingTag[]): SettingTag[] {
   const map = new Map<string, string>();
 
   extraTags.forEach((tag) => {
@@ -65,70 +58,113 @@ function allTags(cards: EditableCard[], extraTags: SettingTag[] = []): SettingTa
   return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
 }
 
-function normalizeTagName(value: string): string {
-  return value.trim();
+function uniqueCategories(cards: EditableCard[]): string[] {
+  const set = new Set<string>();
+  cards.forEach((card) => {
+    const category = card.category?.trim();
+    if (category) {
+      set.add(category);
+    }
+  });
+  return Array.from(set);
+}
+
+function cardInCategory(card: EditableCard, categoryKey: string): boolean {
+  if (categoryKey === 'all') {
+    return true;
+  }
+  if (categoryKey === UNCATEGORIZED_KEY) {
+    return !card.category;
+  }
+  return card.category === categoryKey;
+}
+
+function cardMatchesTags(card: EditableCard, activeTagFilters: string[]): boolean {
+  if (activeTagFilters.length === 0) {
+    return true;
+  }
+  const names = new Set(card.tags.map((tag) => tag.name));
+  return activeTagFilters.every((tag) => names.has(tag));
 }
 
 export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewProps) {
   const [cards, setCards] = useState<EditableCard[]>(() => normalizeCards(sourceCards));
   const [selectedCardId, setSelectedCardId] = useState<string | null>(() => sourceCards[0]?.id ?? null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<SettingCard['type'] | 'all'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [tagFilter, setTagFilter] = useState<string>('all');
-  const [tagManagerName, setTagManagerName] = useState('');
-  const [tagManagerColor, setTagManagerColor] = useState('#ff8a6a');
+  const [selectedFolder, setSelectedFolder] = useState<string>('all');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
+  const [toolbarTagSearchOpen, setToolbarTagSearchOpen] = useState(false);
+  const [toolbarTagQuery, setToolbarTagQuery] = useState('');
+
+  const [detailTagSearchOpen, setDetailTagSearchOpen] = useState(false);
+  const [detailTagQuery, setDetailTagQuery] = useState('');
   const [detailNewCategory, setDetailNewCategory] = useState('');
-  const [tagSearchQuery, setTagSearchQuery] = useState('');
-  const [tagSearchOpen, setTagSearchOpen] = useState(false);
+
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [tagManagerName, setTagManagerName] = useState('');
+  const [tagManagerColor, setTagManagerColor] = useState('#ff8a6a');
   const [categoryManagerName, setCategoryManagerName] = useState('');
+
   const [customTags, setCustomTags] = useState<SettingTag[]>([]);
   const [categories, setCategories] = useState<string[]>(() => uniqueCategories(normalizeCards(sourceCards)));
+
   const [dragState, setDragState] = useState<DragState | null>(null);
+
   const localIdRef = useRef(0);
   const cardsRef = useRef<EditableCard[]>(cards);
+  const toolbarSearchRef = useRef<HTMLDivElement | null>(null);
+  const detailSearchRef = useRef<HTMLDivElement | null>(null);
 
   const selectedCard = useMemo(() => cards.find((item) => item.id === selectedCardId) ?? null, [cards, selectedCardId]);
   const tagOptions = useMemo(() => allTags(cards, customTags), [cards, customTags]);
 
-  const totalByType = useMemo(() => {
-    return typeOrder.reduce<Record<SettingCard['type'], number>>((acc, type) => {
-      acc[type] = cards.filter((item) => item.type === type).length;
-      return acc;
-    }, { character: 0, location: 0, item: 0, event: 0 });
-  }, [cards]);
+  const visibleCards = useMemo(() => {
+    return cards.filter((card) => cardInCategory(card, selectedFolder) && cardMatchesTags(card, activeTagFilters));
+  }, [activeTagFilters, cards, selectedFolder]);
 
-  const totalByCategory = useMemo(() => {
-    return categories.reduce<Record<string, number>>((acc, category) => {
-      acc[category] = cards.filter((item) => item.category === category).length;
-      return acc;
-    }, {});
+  const folderEntries = useMemo(() => {
+    const all = [
+      { key: 'all', label: '全部设定', count: cards.length },
+      ...categories.map((category) => ({
+        key: category,
+        label: category,
+        count: cards.filter((card) => card.category === category).length,
+      })),
+      {
+        key: UNCATEGORIZED_KEY,
+        label: '未分类',
+        count: cards.filter((card) => !card.category).length,
+      },
+    ];
+
+    return all.filter((item) => item.count > 0 || item.key === 'all' || item.key === UNCATEGORIZED_KEY);
   }, [cards, categories]);
 
-  const filteredCards = useMemo(() => {
-    return cards.filter((item) => {
-      const matchType = typeFilter === 'all' || item.type === typeFilter;
-      const matchCategory = categoryFilter === 'all' || item.category === categoryFilter;
-      const matchTag = tagFilter === 'all' || item.tags.some((tag) => tag.name === tagFilter);
-      return matchType && matchCategory && matchTag;
-    });
-  }, [cards, categoryFilter, tagFilter, typeFilter]);
+  const totalByCategory = useMemo(() => {
+    return folderEntries.reduce<Record<string, number>>((acc, item) => {
+      acc[item.key] = item.count;
+      return acc;
+    }, {});
+  }, [folderEntries]);
 
-  const tagSearchCandidates = useMemo(() => {
-    const query = normalizeTagName(tagSearchQuery).toLowerCase();
+  const toolbarTagCandidates = useMemo(() => {
+    const query = normalizeTagName(toolbarTagQuery).toLowerCase();
+    return tagOptions.filter((tag) => !query || tag.name.toLowerCase().includes(query));
+  }, [tagOptions, toolbarTagQuery]);
+
+  const detailTagCandidates = useMemo(() => {
+    const query = normalizeTagName(detailTagQuery).toLowerCase();
     const selectedNames = new Set((selectedCard?.tags ?? []).map((tag) => tag.name));
     return tagOptions.filter((tag) => {
       if (selectedNames.has(tag.name)) {
         return false;
       }
-      if (!query) {
-        return true;
-      }
-      return tag.name.toLowerCase().includes(query);
+      return !query || tag.name.toLowerCase().includes(query);
     });
-  }, [selectedCard?.tags, tagOptions, tagSearchQuery]);
+  }, [detailTagQuery, selectedCard?.tags, tagOptions]);
 
   const applyCards = (updater: (prev: EditableCard[]) => EditableCard[]) => {
     setCards((prev) => {
@@ -181,6 +217,27 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     };
   }, [dragState, onCardsChange]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (toolbarTagSearchOpen && toolbarSearchRef.current && !toolbarSearchRef.current.contains(target)) {
+        setToolbarTagSearchOpen(false);
+        setToolbarTagQuery('');
+      }
+
+      if (detailTagSearchOpen && detailSearchRef.current && !detailSearchRef.current.contains(target)) {
+        setDetailTagSearchOpen(false);
+        setDetailTagQuery('');
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [detailTagSearchOpen, toolbarTagSearchOpen]);
+
   const onCardMouseDown = (event: ReactMouseEvent<HTMLDivElement>, card: EditableCard) => {
     if (event.button !== 0) {
       return;
@@ -218,6 +275,11 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
 
     applyCards((prev) => [...prev, created]);
     setSelectedCardId(created.id);
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      next.add(UNCATEGORIZED_KEY);
+      return next;
+    });
   };
 
   const updateSelectedCard = (updater: (card: EditableCard) => EditableCard) => {
@@ -229,10 +291,6 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   };
 
   const handleAssignCategory = (category: string) => {
-    if (!selectedCard) {
-      return;
-    }
-
     const normalized = category.trim();
     updateSelectedCard((card) => ({ ...card, category: normalized || undefined }));
     if (normalized && !categories.includes(normalized)) {
@@ -250,6 +308,14 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     setCategoryManagerName('');
   };
 
+  const handleDeleteCategory = (name: string) => {
+    setCategories((prev) => prev.filter((category) => category !== name));
+    applyCards((prev) => prev.map((card) => (card.category === name ? { ...card, category: undefined } : card)));
+    if (selectedFolder === name) {
+      setSelectedFolder('all');
+    }
+  };
+
   const handleUploadImage = async (file: File) => {
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -262,6 +328,21 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       ...card,
       imageUrl: dataUrl,
     }));
+  };
+
+  const upsertGlobalTag = (name: string, color: string) => {
+    const normalized = normalizeTagName(name);
+    if (!normalized) {
+      return;
+    }
+
+    setCustomTags((prev) => {
+      const exists = prev.some((tag) => tag.name === normalized);
+      if (exists) {
+        return prev.map((tag) => (tag.name === normalized ? { ...tag, color } : tag));
+      }
+      return [...prev, { name: normalized, color }];
+    });
   };
 
   const addTagToSelected = (name: string, color: string) => {
@@ -283,21 +364,6 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     });
   };
 
-  const upsertGlobalTag = (name: string, color: string) => {
-    const normalized = normalizeTagName(name);
-    if (!normalized) {
-      return;
-    }
-
-    setCustomTags((prev) => {
-      const exists = prev.some((tag) => tag.name === normalized);
-      if (exists) {
-        return prev.map((tag) => (tag.name === normalized ? { ...tag, color } : tag));
-      }
-      return [...prev, { name: normalized, color }];
-    });
-  };
-
   const handleCreateTag = () => {
     const normalized = normalizeTagName(tagManagerName);
     if (!normalized) {
@@ -305,30 +371,11 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
     }
 
     upsertGlobalTag(normalized, tagManagerColor);
-
     setTagManagerName('');
   };
 
-  const handleRemoveTag = (name: string) => {
-    if (!selectedCard) {
-      return;
-    }
-
-    updateSelectedCard((card) => ({
-      ...card,
-      tags: card.tags.filter((tag) => tag.name !== name),
-    }));
-  };
-
   const handleSetTagColor = (name: string, color: string) => {
-    setCustomTags((prev) => {
-      const exists = prev.some((tag) => tag.name === name);
-      if (!exists) {
-        return [...prev, { name, color }];
-      }
-      return prev.map((tag) => (tag.name === name ? { ...tag, color } : tag));
-    });
-
+    upsertGlobalTag(name, color);
     applyCards((prev) =>
       prev.map((card) => ({
         ...card,
@@ -340,37 +387,60 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
   const handleDeleteTag = (name: string) => {
     setCustomTags((prev) => prev.filter((tag) => tag.name !== name));
     applyCards((prev) => prev.map((card) => ({ ...card, tags: card.tags.filter((tag) => tag.name !== name) })));
-    if (tagFilter === name) {
-      setTagFilter('all');
-    }
+    setActiveTagFilters((prev) => prev.filter((tag) => tag !== name));
   };
 
-  const handleDeleteCategory = (name: string) => {
-    setCategories((prev) => prev.filter((category) => category !== name));
-    applyCards((prev) => prev.map((card) => (card.category === name ? { ...card, category: undefined } : card)));
-    if (categoryFilter === name) {
-      setCategoryFilter('all');
+  const handleRemoveTagFromSelected = (name: string) => {
+    if (!selectedCard) {
+      return;
     }
+
+    updateSelectedCard((card) => ({
+      ...card,
+      tags: card.tags.filter((tag) => tag.name !== name),
+    }));
   };
 
-  const handleCreateAndAddTagFromSearch = () => {
-    const normalized = normalizeTagName(tagSearchQuery);
+  const toggleTagFilter = (name: string) => {
+    setActiveTagFilters((prev) => {
+      if (prev.includes(name)) {
+        return prev.filter((tag) => tag !== name);
+      }
+      return [...prev, name];
+    });
+  };
+
+  const createAndUseToolbarTag = () => {
+    const normalized = normalizeTagName(toolbarTagQuery);
     if (!normalized) {
       return;
     }
+
+    upsertGlobalTag(normalized, tagManagerColor);
+    setActiveTagFilters((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setToolbarTagQuery('');
+    setToolbarTagSearchOpen(false);
+  };
+
+  const createAndAddDetailTag = () => {
+    const normalized = normalizeTagName(detailTagQuery);
+    if (!normalized) {
+      return;
+    }
+
     upsertGlobalTag(normalized, tagManagerColor);
     addTagToSelected(normalized, tagManagerColor);
-    setTagSearchQuery('');
-    setTagSearchOpen(false);
+    setDetailTagQuery('');
+    setDetailTagSearchOpen(false);
   };
 
   return (
     <div className={styles.container}>
-      <Panel side="left" width="320px" className={styles.listPanel}>
+      <Panel side="left" width="340px" className={styles.listPanel}>
         <div className={styles.panelHeader}>
           <h3>设定卡片</h3>
           <div className={styles.panelActions}>
-            <Button size="sm" variant="secondary" onClick={() => setSummaryOpen((value) => !value)}>
+            <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => setSummaryOpen((value) => !value)}>
               {summaryOpen ? '收起设定汇总' : '设定汇总'}
             </Button>
             <button className={styles.addButton} aria-label="新建设定卡片" onClick={handleAddCard}>
@@ -385,108 +455,134 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
         <div className={styles.toolbox}>
           <div className={styles.toolboxHeader}>工具栏</div>
           <div className={styles.toolboxRow}>
-            <Button size="sm" variant="secondary" onClick={() => setIsTagManagerOpen(true)}>
+            <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setIsTagManagerOpen(true)}>
               标签管理器
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setIsCategoryManagerOpen(true)}>
+            <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setIsCategoryManagerOpen(true)}>
               分类管理器
             </Button>
+            <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setToolbarTagSearchOpen((prev) => !prev)}>
+              {toolbarTagSearchOpen ? '收起标签搜索' : '标签搜索'}
+            </Button>
           </div>
+
+          {toolbarTagSearchOpen && (
+            <div className={styles.tagSearchWrap} ref={toolbarSearchRef}>
+              <input
+                className={styles.tagInput}
+                value={toolbarTagQuery}
+                onChange={(event) => setToolbarTagQuery(event.target.value)}
+                placeholder="输入标签名进行搜索"
+                autoFocus
+              />
+              <div className={styles.tagSearchDropdown}>
+                {toolbarTagCandidates.map((tag) => (
+                  <button key={tag.name} className={styles.tagSearchItem} onClick={() => toggleTagFilter(tag.name)}>
+                    <span className={styles.tagDot} style={{ background: tag.color }} />
+                    {activeTagFilters.includes(tag.name) ? '取消筛选' : '按标签筛选'}：{tag.name}
+                  </button>
+                ))}
+                {normalizeTagName(toolbarTagQuery) && !tagOptions.some((tag) => tag.name === normalizeTagName(toolbarTagQuery)) && (
+                  <button className={styles.tagCreateItem} onClick={createAndUseToolbarTag}>
+                    创建并筛选标签 “{normalizeTagName(toolbarTagQuery)}”
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className={styles.tagFilters}>
-            <button
-              className={`${styles.tagFilter} ${tagFilter === 'all' ? styles.activeTagFilter : ''}`}
-              onClick={() => setTagFilter('all')}
-            >
-              全部标签
-            </button>
             {tagOptions.map((tag) => (
               <button
                 key={tag.name}
-                className={`${styles.tagFilter} ${tagFilter === tag.name ? styles.activeTagFilter : ''}`}
-                onClick={() => setTagFilter(tag.name)}
+                className={`${styles.tagFilter} ${activeTagFilters.includes(tag.name) ? styles.activeTagFilter : ''}`}
+                onClick={() => toggleTagFilter(tag.name)}
               >
                 <span className={styles.tagDot} style={{ background: tag.color }} />
                 {tag.name}
               </button>
             ))}
+            {activeTagFilters.length > 0 && (
+              <button className={styles.tagFilter} onClick={() => setActiveTagFilters([])}>
+                清空标签筛选
+              </button>
+            )}
           </div>
         </div>
 
-        <div className={styles.filterTabs} role="tablist" aria-label="按类型筛选">
-          {(['all', 'character', 'location', 'item', 'event'] as const).map((item) => (
-            <button
-              key={item}
-              role="tab"
-              aria-selected={typeFilter === item}
-              className={`${styles.filterTab} ${typeFilter === item ? styles.active : ''}`}
-              onClick={() => setTypeFilter(item)}
-            >
-              {item === 'all' ? '全部' : typeLabels[item]}
-            </button>
-          ))}
-        </div>
-
-        <ul className={styles.cardList}>
-          {filteredCards.map((card, index) => (
-            <li
-              key={card.id}
-              style={{ animationDelay: `${index * 40}ms` }}
-              className={`${styles.listItem} ${selectedCardId === card.id ? styles.selected : ''}`}
-              onClick={() => setSelectedCardId(card.id)}
-            >
-              <span className={styles.listItemDot} style={{ background: card.color }} />
-              <div className={styles.listItemContent}>
-                <span className={styles.listItemTitle}>{card.title}</span>
-                <span className={styles.listItemType}>
-                  {typeLabels[card.type]}
-                  {card.category ? ` · ${card.category}` : ''}
-                </span>
+        <div className={styles.folderTree}>
+          {folderEntries.map((folder) => {
+            const isExpanded = expandedFolders.has(folder.key) || selectedFolder === folder.key;
+            const scopedCards = cards.filter((card) => cardInCategory(card, folder.key) && cardMatchesTags(card, activeTagFilters));
+            return (
+              <div key={folder.key} className={styles.folderBlock}>
+                <button
+                  className={`${styles.folderHeader} ${selectedFolder === folder.key ? styles.folderHeaderActive : ''}`}
+                  onClick={() => {
+                    setSelectedFolder(folder.key);
+                    setExpandedFolders((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(folder.key)) {
+                        next.delete(folder.key);
+                      } else {
+                        next.add(folder.key);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <span className={styles.folderHeaderLeft}>
+                    <span className={styles.folderIcon}>📂</span>
+                    {folder.label}
+                  </span>
+                  <span className={styles.folderCount}>{folder.key === 'all' ? visibleCards.length : scopedCards.length}</span>
+                </button>
+                {isExpanded && (
+                  <ul className={styles.folderCardList}>
+                    {(folder.key === 'all' ? visibleCards : scopedCards).map((card) => (
+                      <li
+                        key={card.id}
+                        className={`${styles.listItem} ${selectedCardId === card.id ? styles.selected : ''}`}
+                        onClick={() => setSelectedCardId(card.id)}
+                      >
+                        <span className={styles.listItemDot} style={{ background: card.color }} />
+                        <div className={styles.listItemContent}>
+                          <span className={styles.listItemTitle}>{card.title}</span>
+                          <span className={styles.listItemType}>
+                            {card.tags.length > 0 ? card.tags.map((tag) => tag.name).join(' · ') : '无标签'}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       </Panel>
 
       {summaryOpen && (
-        <Panel side="left" width="250px" className={styles.summaryPanel}>
+        <Panel side="left" width="260px" className={styles.summaryPanel}>
           <div className={styles.summaryHeader}>
             <h3>设定汇总</h3>
           </div>
           <div className={styles.summarySection}>
-            <h4>类型统计</h4>
+            <h4>分类统计</h4>
             <ul className={styles.summaryList}>
-              {typeOrder.map((type) => (
-                <li key={type} className={styles.summaryItem}>
-                  <span>{typeLabels[type]}</span>
-                  <strong>{totalByType[type]}</strong>
+              {folderEntries.map((item) => (
+                <li key={item.key} className={styles.summaryItem}>
+                  <span>{item.label}</span>
+                  <strong>{item.key === 'all' ? cards.length : totalByCategory[item.key] ?? 0}</strong>
                 </li>
               ))}
             </ul>
           </div>
           <div className={styles.summarySection}>
-            <h4>分类筛选</h4>
-            <div className={styles.categoryFilters}>
-              <button
-                className={`${styles.categoryFilter} ${categoryFilter === 'all' ? styles.activeCategory : ''}`}
-                onClick={() => setCategoryFilter('all')}
-              >
-                全部
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  className={`${styles.categoryFilter} ${categoryFilter === category ? styles.activeCategory : ''}`}
-                  onClick={() => setCategoryFilter(category)}
-                >
-                  {category} ({totalByCategory[category] ?? 0})
-                </button>
-              ))}
-            </div>
-            <div className={styles.categoryCreator}>
-              <Button size="sm" variant="secondary" onClick={() => setIsCategoryManagerOpen(true)}>
-                打开分类管理器
-              </Button>
-            </div>
+            <h4>标签筛选</h4>
+            <p className={styles.summaryHint}>
+              当前已选 {activeTagFilters.length} 个标签（多标签为“且”匹配）
+            </p>
           </div>
         </Panel>
       )}
@@ -494,9 +590,9 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
       <div className={styles.canvasArea}>
         <div className={styles.canvas}>
           <svg className={styles.connections} aria-hidden="true">
-            {cards.flatMap((card) =>
+            {visibleCards.flatMap((card) =>
               card.relations.map((relation) => {
-                const target = cards.find((item) => item.id === relation.targetId);
+                const target = visibleCards.find((item) => item.id === relation.targetId);
                 if (!target) {
                   return null;
                 }
@@ -518,7 +614,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
             )}
           </svg>
 
-          {cards.map((card, index) => (
+          {visibleCards.map((card, index) => (
             <div
               key={card.id}
               className={`${styles.canvasCard} ${dragState?.id === card.id ? styles.dragging : ''} ${selectedCardId === card.id ? styles.selected : ''}`}
@@ -543,33 +639,10 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
         </div>
 
         <div className={styles.canvasHint}>提示：按住卡片即可拖动并调整位置。</div>
-
-        <div className={styles.canvasControls}>
-          <button className={styles.canvasControl} aria-label="放大画布">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="11" y1="8" x2="11" y2="14" />
-              <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-          <button className={styles.canvasControl} aria-label="缩小画布">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-          <button className={styles.canvasControl} aria-label="适配画布">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-            </svg>
-          </button>
-        </div>
       </div>
 
       {selectedCard && (
-        <Panel side="right" width="420px" className={styles.detailPanel}>
+        <Panel side="right" width="440px" className={styles.detailPanel}>
           <div className={styles.detailHeader}>
             <span className={styles.detailType} style={{ color: selectedCard.color }}>
               {typeLabels[selectedCard.type]}
@@ -613,6 +686,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               <Button
                 size="sm"
                 variant="secondary"
+                className={styles.inlineActionButton}
                 onClick={() => {
                   const normalized = detailNewCategory.trim();
                   if (!normalized) {
@@ -635,7 +709,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
             <div className={styles.cardTags}>
               {selectedCard.tags.length > 0 ? (
                 selectedCard.tags.map((tag) => (
-                  <button key={tag.name} className={styles.tagChip} onClick={() => handleRemoveTag(tag.name)}>
+                  <button key={tag.name} className={styles.tagChip} onClick={() => handleRemoveTagFromSelected(tag.name)}>
                     <span className={styles.tagDot} style={{ background: tag.color }} />
                     {tag.name}
                     <span className={styles.tagRemove}>×</span>
@@ -645,45 +719,45 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                 <p className={styles.emptyState}>无标签</p>
               )}
             </div>
-            {tagOptions.length > 0 && (
-              <div className={styles.tagPalette}>
-                <div className={styles.tagSearchWrap}>
+
+            <div className={styles.tagPalette}>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => setDetailTagSearchOpen((prev) => !prev)}>
+                {detailTagSearchOpen ? '收起标签输入' : '添加标签'}
+              </Button>
+
+              {detailTagSearchOpen && (
+                <div className={styles.tagSearchWrap} ref={detailSearchRef}>
                   <input
                     className={styles.detailInput}
-                    value={tagSearchQuery}
+                    value={detailTagQuery}
                     placeholder="搜索标签或输入后创建"
-                    onFocus={() => setTagSearchOpen(true)}
-                    onChange={(event) => {
-                      setTagSearchQuery(event.target.value);
-                      setTagSearchOpen(true);
-                    }}
+                    autoFocus
+                    onChange={(event) => setDetailTagQuery(event.target.value)}
                   />
-                  {tagSearchOpen && (
-                    <div className={styles.tagSearchDropdown}>
-                      {tagSearchCandidates.map((tag) => (
-                        <button
-                          key={tag.name}
-                          className={styles.tagSearchItem}
-                          onClick={() => {
-                            addTagToSelected(tag.name, tag.color);
-                            setTagSearchQuery('');
-                            setTagSearchOpen(false);
-                          }}
-                        >
-                          <span className={styles.tagDot} style={{ background: tag.color }} />
-                          {tag.name}
-                        </button>
-                      ))}
-                      {normalizeTagName(tagSearchQuery) && !tagOptions.some((tag) => tag.name === normalizeTagName(tagSearchQuery)) && (
-                        <button className={styles.tagCreateItem} onClick={handleCreateAndAddTagFromSearch}>
-                          创建并添加标签 “{normalizeTagName(tagSearchQuery)}”
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <div className={styles.tagSearchDropdown}>
+                    {detailTagCandidates.map((tag) => (
+                      <button
+                        key={tag.name}
+                        className={styles.tagSearchItem}
+                        onClick={() => {
+                          addTagToSelected(tag.name, tag.color);
+                          setDetailTagQuery('');
+                          setDetailTagSearchOpen(false);
+                        }}
+                      >
+                        <span className={styles.tagDot} style={{ background: tag.color }} />
+                        添加标签：{tag.name}
+                      </button>
+                    ))}
+                    {normalizeTagName(detailTagQuery) && !tagOptions.some((tag) => tag.name === normalizeTagName(detailTagQuery)) && (
+                      <button className={styles.tagCreateItem} onClick={createAndAddDetailTag}>
+                        创建并添加标签 “{normalizeTagName(detailTagQuery)}”
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className={styles.detailSection}>
@@ -735,6 +809,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                 <Button
                   variant="ghost"
                   size="sm"
+                  className={styles.inlineActionButton}
                   onClick={() => {
                     updateSelectedCard((card) => ({ ...card, imageUrl: undefined }));
                   }}
@@ -775,7 +850,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                 value={tagManagerColor}
                 onChange={(event) => setTagManagerColor(event.target.value)}
               />
-              <Button size="sm" variant="secondary" onClick={handleCreateTag}>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={handleCreateTag}>
                 保存标签
               </Button>
             </div>
@@ -793,7 +868,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                       value={tag.color}
                       onChange={(event) => handleSetTagColor(tag.name, event.target.value)}
                     />
-                    <Button size="sm" variant="ghost" onClick={() => handleDeleteTag(tag.name)}>
+                    <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => handleDeleteTag(tag.name)}>
                       删除
                     </Button>
                   </div>
@@ -817,7 +892,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
                 onChange={(event) => setCategoryManagerName(event.target.value)}
                 placeholder="新增分类名"
               />
-              <Button size="sm" variant="secondary" onClick={handleAddCategory}>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={handleAddCategory}>
                 保存分类
               </Button>
             </div>
@@ -825,7 +900,7 @@ export function SettingView({ cards: sourceCards, onCardsChange }: SettingViewPr
               {categories.map((category) => (
                 <div key={category} className={styles.managerListItem}>
                   <span className={styles.managerTagName}>{category}</span>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteCategory(category)}>
+                  <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => handleDeleteCategory(category)}>
                     删除
                   </Button>
                 </div>

@@ -25,6 +25,12 @@
   gap: var(--space-2);
 }
 
+.inlineActionButton {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
 .toolbox {
   margin-bottom: var(--space-4);
   padding: var(--space-3);
@@ -46,6 +52,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.toolboxActionButton {
+  flex: 1 1 0;
+  min-width: 104px;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .tagInput {
@@ -77,6 +91,67 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.folderTree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.folderBlock {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.folderHeader {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--slate-700);
+  font-size: var(--text-sm);
+}
+
+.folderHeader:hover {
+  background: var(--slate-50);
+}
+
+.folderHeaderActive {
+  background: var(--coral-50);
+}
+
+.folderHeaderLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.folderIcon {
+  font-size: 14px;
+}
+
+.folderCount {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
+.folderCardList {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .tagFilter {
@@ -398,6 +473,12 @@
   color: var(--slate-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.summaryHint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--slate-500);
 }
 
 .summaryList {
@@ -881,6 +962,28 @@
   .toolbox {
     border-color: var(--slate-600);
     background: var(--slate-800);
+  }
+
+  .folderBlock {
+    border-color: var(--slate-600);
+    background: var(--slate-800);
+  }
+
+  .folderHeader {
+    color: var(--slate-200);
+  }
+
+  .folderHeader:hover {
+    background: var(--slate-700);
+  }
+
+  .folderHeaderActive {
+    background: rgba(249, 107, 71, 0.14);
+  }
+
+  .summaryHint,
+  .folderCount {
+    color: var(--slate-300);
   }
 
   .detailQuickCreateRow {
