@@ -13,4 +13,4 @@ All notable changes to this project are documented in this file.
 - Updated `README.md` to focus on current features and interaction design.
 - Added `docs/ARCHITECTURE.md` for engineering architecture and runtime layering.
 - Added this changelog file and recorded the documentation update commit.
-- Documentation update commit: `PENDING_COMMIT_HASH`
+- Documentation update commit: `f75bf9f`
