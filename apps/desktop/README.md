@@ -2,9 +2,11 @@
 
 Desktop/Web 客户端工程。
 
-完整项目说明、跨平台实现与构建流程请查看仓库根文档：
+完整项目说明、交互设计、架构与变更记录：
 
 - `README.md`
+- `docs/ARCHITECTURE.md`
+- `CHANGELOG.md`
 
 根目录统一平台构建脚本：
 
