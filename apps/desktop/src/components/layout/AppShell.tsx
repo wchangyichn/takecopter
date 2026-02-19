@@ -11,7 +11,7 @@ interface AppShellProps {
   saveStatus: SaveStatus;
   inStoryWorkspace: boolean;
   storyTitle?: string;
-  onBackHome: () => void;
+  onRenameStory?: () => void;
 }
 
 export function AppShell({
@@ -21,7 +21,7 @@ export function AppShell({
   saveStatus,
   inStoryWorkspace,
   storyTitle,
-  onBackHome,
+  onRenameStory,
 }: AppShellProps) {
   return (
     <div className={styles.shell}>
@@ -35,9 +35,7 @@ export function AppShell({
         <StatusBar
           storyTitle={storyTitle}
           inStoryWorkspace={inStoryWorkspace}
-          currentView={currentView}
-          onViewChange={onViewChange}
-          onBackHome={onBackHome}
+          onRenameStory={onRenameStory}
         />
         <main className={styles.content} role="main">
           {children}

@@ -11,9 +11,13 @@ function App() {
     stories,
     getWorkspaceCards,
     getWorkspaceTree,
+    getWorkspaceLibrary,
+    getGlobalLibrary,
     createStory,
     renameStory,
     saveSettingCards,
+    saveStoryLibrary,
+    saveGlobalLibrary,
     saveTreeData,
     exportProjectFile,
     exportStoryFile,
@@ -158,14 +162,18 @@ function App() {
     }
   };
 
-  const handleBackHome = () => {
-    selectStory(null);
-    setView('home');
+  const handleRenameCurrentStory = () => {
+    if (!selectedStoryId) {
+      return;
+    }
+    handleRenameStory(selectedStoryId);
   };
 
   const renderView = () => {
     const currentCards = getWorkspaceCards(selectedStoryId);
     const currentTree = getWorkspaceTree(selectedStoryId);
+    const currentLibrary = getWorkspaceLibrary(selectedStoryId);
+    const globalLibrary = getGlobalLibrary();
 
     switch (currentView) {
       case 'home':
@@ -190,6 +198,10 @@ function App() {
             key={`setting-${selectedStoryId}`}
             cards={currentCards}
             onCardsChange={(cards) => saveSettingCards(selectedStoryId, cards)}
+            globalLibrary={globalLibrary}
+            storyLibrary={currentLibrary}
+            onGlobalLibraryChange={(library) => saveGlobalLibrary(library)}
+            onStoryLibraryChange={(library) => saveStoryLibrary(selectedStoryId, library)}
           />
         ) : (
           <HomeView
@@ -303,7 +315,7 @@ function App() {
         saveStatus={saveStatus}
         inStoryWorkspace={inStoryWorkspace}
         storyTitle={getStoryTitle()}
-        onBackHome={handleBackHome}
+        onRenameStory={handleRenameCurrentStory}
       >
         {renderView()}
       </AppShell>
