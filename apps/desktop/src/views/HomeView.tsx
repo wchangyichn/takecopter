@@ -1,7 +1,65 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '../components/ui';
 import type { Story } from '../types';
 import styles from './HomeView.module.css';
+
+const MODEL_KEY_STORAGE = 'takecopter.desktop.model-api-keys.v1';
+const MODEL_OPTIONS = [
+  { id: 'openai:gpt-4.1', label: 'OpenAI GPT-4.1' },
+  { id: 'anthropic:claude-3.7-sonnet', label: 'Anthropic Claude 3.7 Sonnet' },
+  { id: 'deepseek:deepseek-chat', label: 'DeepSeek Chat' },
+  { id: 'qwen:qwen-max', label: 'Qwen Max' },
+] as const;
+
+type ModelApiKeyEntry = {
+  apiKey: string;
+  endpoint?: string;
+  updatedAt: string;
+};
+
+type ModelApiKeyState = Record<string, ModelApiKeyEntry>;
+
+function readModelApiKeys(): ModelApiKeyState {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MODEL_KEY_STORAGE);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).flatMap(([modelId, value]) => {
+        if (!value || typeof value !== 'object') {
+          return [];
+        }
+
+        const source = value as { apiKey?: unknown; endpoint?: unknown; updatedAt?: unknown };
+        if (typeof source.apiKey !== 'string' || source.apiKey.trim().length === 0) {
+          return [];
+        }
+
+        return [[modelId, { apiKey: source.apiKey, endpoint: typeof source.endpoint === 'string' ? source.endpoint : undefined, updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : new Date().toISOString() }]];
+      })
+    );
+  } catch {
+    return {};
+  }
+}
+
+function maskApiKey(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '未配置';
+  }
+  if (trimmed.length <= 8) {
+    return `${trimmed.slice(0, 2)}***`;
+  }
+  return `${trimmed.slice(0, 4)}***${trimmed.slice(-4)}`;
+}
 
 interface HomeViewProps {
   stories: Story[];
@@ -31,7 +89,67 @@ export function HomeView({
   onRenameStory,
 }: HomeViewProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [isModelKeyManagerOpen, setIsModelKeyManagerOpen] = useState(false);
+  const [modelApiKeys, setModelApiKeys] = useState<ModelApiKeyState>(() => readModelApiKeys());
+  const [activeModelId, setActiveModelId] = useState<string>(MODEL_OPTIONS[0].id);
+  const [draftApiKey, setDraftApiKey] = useState('');
+  const [draftEndpoint, setDraftEndpoint] = useState('');
   const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const configuredModelCount = useMemo(
+    () => Object.values(modelApiKeys).filter((entry) => entry.apiKey.trim().length > 0).length,
+    [modelApiKeys]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(MODEL_KEY_STORAGE, JSON.stringify(modelApiKeys));
+  }, [modelApiKeys]);
+
+  const openModelKeyManager = () => {
+    const entry = modelApiKeys[activeModelId];
+    setDraftApiKey(entry?.apiKey ?? '');
+    setDraftEndpoint(entry?.endpoint ?? '');
+    setIsModelKeyManagerOpen(true);
+  };
+
+  const handleSwitchModelForKey = (modelId: string) => {
+    setActiveModelId(modelId);
+    const entry = modelApiKeys[modelId];
+    setDraftApiKey(entry?.apiKey ?? '');
+    setDraftEndpoint(entry?.endpoint ?? '');
+  };
+
+  const handleSaveModelKey = () => {
+    const apiKey = draftApiKey.trim();
+    if (!apiKey) {
+      return;
+    }
+
+    setModelApiKeys((prev) => ({
+      ...prev,
+      [activeModelId]: {
+        apiKey,
+        endpoint: draftEndpoint.trim() || undefined,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+  };
+
+  const handleDeleteModelKey = () => {
+    setModelApiKeys((prev) => {
+      if (!(activeModelId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[activeModelId];
+      return next;
+    });
+    setDraftApiKey('');
+    setDraftEndpoint('');
+  };
 
   const formatDate = (date: Date) => {
     const now = new Date();
@@ -140,6 +258,15 @@ export function HomeView({
                 </span>
                 <span>重新链接本地数据库</span>
               </button>
+              <button className={styles.actionItem} onClick={openModelKeyManager}>
+                <span className={styles.actionIcon} style={{ background: 'var(--violet-100)', color: 'var(--violet-600)' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 15v2m0-10v2m5 3h2M5 12H3m14.95 4.95 1.41 1.41M5.64 5.64 4.22 4.22m13.73-0.01-1.41 1.41M5.64 18.36l-1.42 1.42" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </span>
+                <span>模型密钥设置</span>
+              </button>
             </div>
             <input
               ref={importInputRef}
@@ -178,6 +305,42 @@ export function HomeView({
           </Card>
         </aside>
       </div>
+
+      {isModelKeyManagerOpen && (
+        <div className={styles.modalOverlay} role="presentation" onClick={() => setIsModelKeyManagerOpen(false)}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <h3>模型密钥设置</h3>
+            <p className={styles.modalHint}>密钥需手动输入，仅保存在当前设备。不同模型可同时保存，方便切换。</p>
+            <p className={styles.modalMeta}>已配置模型：{configuredModelCount}/{MODEL_OPTIONS.length}</p>
+            <div className={styles.modalRow}>
+              <select className={styles.modalInput} value={activeModelId} onChange={(event) => handleSwitchModelForKey(event.target.value)}>
+                {MODEL_OPTIONS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <input className={styles.modalInput} value={draftApiKey} onChange={(event) => setDraftApiKey(event.target.value)} placeholder="请输入 API Key" />
+              <input className={styles.modalInput} value={draftEndpoint} onChange={(event) => setDraftEndpoint(event.target.value)} placeholder="可选：自定义 Endpoint" />
+              <div className={styles.modalActions}>
+                <Button size="sm" variant="secondary" onClick={handleSaveModelKey}>保存密钥</Button>
+                <Button size="sm" variant="ghost" onClick={handleDeleteModelKey}>删除当前密钥</Button>
+              </div>
+            </div>
+            <div className={styles.modelList}>
+              {MODEL_OPTIONS.map((item) => {
+                const entry = modelApiKeys[item.id];
+                return (
+                  <div key={item.id} className={styles.modelItem}>
+                    <span>{item.label}</span>
+                    <span>{entry ? maskApiKey(entry.apiKey) : '未配置'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

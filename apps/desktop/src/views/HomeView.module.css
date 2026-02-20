@@ -267,6 +267,77 @@
   color: var(--slate-400);
 }
 
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg-overlay);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.modalCard {
+  width: min(760px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.modalCard h3 {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.modalHint,
+.modalMeta {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--slate-500);
+}
+
+.modalRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modalInput {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  color: var(--slate-700);
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.modelItem {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--slate-50);
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 1024px) {
   .layout {
     grid-template-columns: 1fr;
@@ -320,6 +391,26 @@
 
   .activityText strong {
     color: var(--slate-100);
+  }
+
+  .modalCard {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+  }
+
+  .modalHint,
+  .modalMeta {
+    color: var(--slate-300);
+  }
+
+  .modalInput {
+    background: var(--slate-700);
+    border-color: var(--slate-600);
+    color: var(--slate-100);
+  }
+
+  .modelItem {
+    background: var(--slate-700);
   }
 }
 
