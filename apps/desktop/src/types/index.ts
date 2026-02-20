@@ -33,6 +33,7 @@ export interface SettingCard {
 export interface SettingSummaryIteration {
   id: string;
   value: string;
+  versionTag?: string;
   reasonType: 'manual' | 'card';
   reasonText?: string;
   reasonCardId?: string;
@@ -55,6 +56,7 @@ export interface SettingCustomField {
 export interface SettingFieldIteration {
   id: string;
   value: string;
+  versionTag?: string;
   reasonType: 'manual' | 'card';
   reasonText?: string;
   reasonCardId?: string;

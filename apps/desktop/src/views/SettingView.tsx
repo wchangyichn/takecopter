@@ -84,6 +84,7 @@ type IterationReasonType = 'manual' | 'card';
 type IterationDraftState = {
   open: boolean;
   value: string;
+  versionTag: string;
   reasonType: IterationReasonType;
   reasonText: string;
   reasonCardId: string;
@@ -490,6 +491,7 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
               .map((item) => ({
                 id: item.id,
                 value: item.value,
+                versionTag: typeof item.versionTag === 'string' ? item.versionTag : undefined,
                 reasonType: item.reasonType === 'card' ? 'card' : 'manual',
                 reasonText: typeof item.reasonText === 'string' ? item.reasonText : undefined,
                 reasonCardId: typeof item.reasonCardId === 'string' ? item.reasonCardId : undefined,
@@ -509,6 +511,7 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
             .map((item) => ({
               id: item.id,
               value: item.value,
+              versionTag: typeof item.versionTag === 'string' ? item.versionTag : undefined,
               reasonType: item.reasonType === 'card' ? 'card' : 'manual',
               reasonText: typeof item.reasonText === 'string' ? item.reasonText : undefined,
               reasonCardId: typeof item.reasonCardId === 'string' ? item.reasonCardId : undefined,
@@ -709,6 +712,7 @@ export function SettingView({
   const [summaryIterationDraft, setSummaryIterationDraft] = useState<IterationDraftState>({
     open: false,
     value: '',
+    versionTag: '',
     reasonType: 'manual',
     reasonText: '',
     reasonCardId: '',
@@ -979,6 +983,12 @@ export function SettingView({
     const previousSelectedId = selectedCardIdRef.current;
     const previousIndex = previousSelectedId ? previousCards.findIndex((card) => card.id === previousSelectedId) : -1;
     const nextCards = normalizeCards(sourceCards);
+    const previousSnapshot = JSON.stringify(previousCards);
+    const nextSnapshot = JSON.stringify(nextCards);
+
+    if (previousSnapshot === nextSnapshot) {
+      return;
+    }
 
     queueMicrotask(() => {
       if (cancelled) {
@@ -1784,6 +1794,18 @@ export function SettingView({
     return reasonText?.trim() || '未填写原因';
   };
 
+  const buildIterationOptionLabel = (
+    createdAt: string,
+    reasonType: IterationReasonType,
+    reasonText?: string,
+    reasonCardId?: string,
+    versionTag?: string
+  ): string => {
+    const timeLabel = new Date(createdAt).toLocaleString('zh-CN');
+    const reasonLabel = resolveIterationReasonLabel(reasonType, reasonText, reasonCardId);
+    return `${versionTag?.trim() || '未标记版本'} · ${timeLabel} · ${reasonLabel}`;
+  };
+
   const getCurrentFieldIterationMeta = (field: SettingCustomField): string | null => {
     const activeId = field.activeIterationId;
     if (!activeId) {
@@ -1794,6 +1816,18 @@ export function SettingView({
       return null;
     }
     return resolveIterationReasonLabel(active.reasonType, active.reasonText, active.reasonCardId);
+  };
+
+  const getCurrentFieldIterationTag = (field: SettingCustomField): string | null => {
+    const activeId = field.activeIterationId;
+    if (!activeId) {
+      return null;
+    }
+    const active = (field.iterations ?? []).find((item) => item.id === activeId);
+    if (!active?.versionTag?.trim()) {
+      return null;
+    }
+    return active.versionTag.trim();
   };
 
   const getCurrentSummaryIterationMeta = (card: EditableCard): string | null => {
@@ -1808,6 +1842,18 @@ export function SettingView({
     return resolveIterationReasonLabel(active.reasonType, active.reasonText, active.reasonCardId);
   };
 
+  const getCurrentSummaryIterationTag = (card: EditableCard): string | null => {
+    const activeId = card.activeSummaryIterationId;
+    if (!activeId) {
+      return null;
+    }
+    const active = (card.summaryIterations ?? []).find((item) => item.id === activeId);
+    if (!active?.versionTag?.trim()) {
+      return null;
+    }
+    return active.versionTag.trim();
+  };
+
   const openFieldIterationDraft = (field: SettingCustomField, iteration?: SettingFieldIteration) => {
     const fieldId = field.id ?? '';
     if (!fieldId) {
@@ -1818,6 +1864,7 @@ export function SettingView({
       [fieldId]: {
         open: true,
         value: iteration?.value ?? field.value,
+        versionTag: iteration?.versionTag ?? '',
         reasonType: iteration?.reasonType ?? 'manual',
         reasonText: iteration?.reasonText ?? '',
         reasonCardId: iteration?.reasonCardId ?? '',
@@ -1832,6 +1879,7 @@ export function SettingView({
       [fieldId]: {
         open: false,
         value: '',
+        versionTag: '',
         reasonType: 'manual',
         reasonText: '',
         reasonCardId: '',
@@ -1853,6 +1901,7 @@ export function SettingView({
       return;
     }
     const nextValue = draft.value.trim();
+    const nextVersionTag = draft.versionTag.trim();
     if (!nextValue) {
       setAiError('迭代后的属性值不能为空。');
       return;
@@ -1874,6 +1923,7 @@ export function SettingView({
         iterations[iterationIndex] = {
           ...iterations[iterationIndex],
           value: nextValue,
+          versionTag: nextVersionTag || undefined,
           reasonType: draft.reasonType,
           reasonText: draft.reasonType === 'manual' ? draft.reasonText.trim() : undefined,
           reasonCardId: draft.reasonType === 'card' ? draft.reasonCardId : undefined,
@@ -1883,6 +1933,7 @@ export function SettingView({
         const nextIteration: SettingFieldIteration = {
           id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `iter-${Date.now()}`,
           value: nextValue,
+          versionTag: nextVersionTag || undefined,
           reasonType: draft.reasonType,
           reasonText: draft.reasonType === 'manual' ? draft.reasonText.trim() : undefined,
           reasonCardId: draft.reasonType === 'card' ? draft.reasonCardId : undefined,
@@ -1942,6 +1993,7 @@ export function SettingView({
     setSummaryIterationDraft({
       open: true,
       value: iteration?.value ?? (selectedCard?.summary ?? ''),
+      versionTag: iteration?.versionTag ?? '',
       reasonType: iteration?.reasonType ?? 'manual',
       reasonText: iteration?.reasonText ?? '',
       reasonCardId: iteration?.reasonCardId ?? '',
@@ -1953,6 +2005,7 @@ export function SettingView({
     setSummaryIterationDraft({
       open: false,
       value: '',
+      versionTag: '',
       reasonType: 'manual',
       reasonText: '',
       reasonCardId: '',
@@ -1964,6 +2017,7 @@ export function SettingView({
       return;
     }
     const nextSummary = summaryIterationDraft.value.trim();
+    const nextVersionTag = summaryIterationDraft.versionTag.trim();
     if (!nextSummary) {
       setAiError('摘要迭代内容不能为空。');
       return;
@@ -1980,6 +2034,7 @@ export function SettingView({
         iterations[iterationIndex] = {
           ...iterations[iterationIndex],
           value: nextSummary,
+          versionTag: nextVersionTag || undefined,
           reasonType: summaryIterationDraft.reasonType,
           reasonText: summaryIterationDraft.reasonType === 'manual' ? summaryIterationDraft.reasonText.trim() : undefined,
           reasonCardId: summaryIterationDraft.reasonType === 'card' ? summaryIterationDraft.reasonCardId : undefined,
@@ -1989,6 +2044,7 @@ export function SettingView({
         const nextIteration: SettingSummaryIteration = {
           id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `summary-iter-${Date.now()}`,
           value: nextSummary,
+          versionTag: nextVersionTag || undefined,
           reasonType: summaryIterationDraft.reasonType,
           reasonText: summaryIterationDraft.reasonType === 'manual' ? summaryIterationDraft.reasonText.trim() : undefined,
           reasonCardId: summaryIterationDraft.reasonType === 'card' ? summaryIterationDraft.reasonCardId : undefined,
@@ -3741,6 +3797,9 @@ export function SettingView({
                 <div className={styles.fixedMetaField}>
                   <div className={styles.fixedTagHeader}>
                     <span className={styles.fixedMetaLabel}>摘要</span>
+                    {getCurrentSummaryIterationTag(selectedCard) ? (
+                      <span className={styles.iterationVersionTag}>{getCurrentSummaryIterationTag(selectedCard)}</span>
+                    ) : null}
                     {getCurrentSummaryIterationMeta(selectedCard) ? (
                       <span className={styles.currentIterationBadge}>当前来源：{getCurrentSummaryIterationMeta(selectedCard)}</span>
                     ) : null}
@@ -3775,6 +3834,12 @@ export function SettingView({
                         value={summaryIterationDraft.value}
                         onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, value: event.target.value }))}
                         placeholder="输入迭代后的摘要"
+                      />
+                      <input
+                        className={styles.detailInput}
+                        value={summaryIterationDraft.versionTag}
+                        onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, versionTag: event.target.value }))}
+                        placeholder="版本标签，例如：v1 / v2 / 终稿"
                       />
                       <div className={styles.fieldRelationAdd}>
                         <select
@@ -3825,11 +3890,33 @@ export function SettingView({
                     </div>
                   )}
 
+                  {(selectedCard.summaryIterations ?? []).length > 0 && (
+                    <div className={styles.iterationSwitcherRow}>
+                      <span className={styles.iterationSwitcherLabel}>当前摘要版本</span>
+                      <select
+                        className={styles.iterationSwitcherSelect}
+                        value={selectedCard.activeSummaryIterationId ?? ''}
+                        onChange={(event) => {
+                          if (event.target.value) {
+                            setSummaryIterationAsCurrent(event.target.value);
+                          }
+                        }}
+                      >
+                        {(selectedCard.summaryIterations ?? []).map((iteration) => (
+                          <option key={`summary-switch-${iteration.id}`} value={iteration.id}>
+                            {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className={styles.iterationList}>
                     {(selectedCard.summaryIterations ?? []).map((iteration) => (
                       <div key={iteration.id} className={styles.iterationItem}>
+                        {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
                         <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                        <p className={styles.previewFieldValue}>{iteration.value}</p>
+                        <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
                         <p className={styles.templatePickMeta}>原因：{resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}</p>
                         <div className={styles.managerActionsRow}>
                           <Button
@@ -4037,6 +4124,9 @@ export function SettingView({
                           onChange={(event) => handleUpdateCustomField(index, { name: event.target.value })}
                           placeholder="属性名"
                         />
+                        {getCurrentFieldIterationTag(field) ? (
+                          <span className={styles.iterationVersionTag}>{getCurrentFieldIterationTag(field)}</span>
+                        ) : null}
                         {getCurrentFieldIterationMeta(field) ? (
                           <span className={styles.currentIterationBadge}>当前来源：{getCurrentFieldIterationMeta(field)}</span>
                         ) : null}
@@ -4061,11 +4151,33 @@ export function SettingView({
                       />
 
                       {(field.iterations ?? []).length > 0 && (
+                        <div className={styles.iterationSwitcherRow}>
+                          <span className={styles.iterationSwitcherLabel}>当前属性版本</span>
+                          <select
+                            className={styles.iterationSwitcherSelect}
+                            value={field.activeIterationId ?? ''}
+                            onChange={(event) => {
+                              if (event.target.value) {
+                                setFieldIterationAsCurrent(index, event.target.value);
+                              }
+                            }}
+                          >
+                            {(field.iterations ?? []).map((iteration) => (
+                              <option key={`field-switch-${fieldId}-${iteration.id}`} value={iteration.id}>
+                                {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {(field.iterations ?? []).length > 0 && (
                         <div className={styles.iterationList}>
                           {(field.iterations ?? []).map((iteration) => (
                             <div key={iteration.id} className={styles.iterationItem}>
+                              {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
                               <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                              <p className={styles.previewFieldValue}>{iteration.value}</p>
+                              <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
                               <p className={styles.templatePickMeta}>原因：{resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}</p>
                               <div className={styles.managerActionsRow}>
                                 <Button
@@ -4099,6 +4211,7 @@ export function SettingView({
                                   ...(prev[fieldId] ?? {
                                     open: true,
                                     value: field.value,
+                                    versionTag: '',
                                     reasonType: 'manual',
                                     reasonText: '',
                                     reasonCardId: '',
@@ -4108,6 +4221,27 @@ export function SettingView({
                               }))
                             }
                             placeholder="输入该属性的新版本内容"
+                          />
+                          <input
+                            className={styles.detailInput}
+                            value={fieldIterationDrafts[fieldId]?.versionTag ?? ''}
+                            onChange={(event) =>
+                              setFieldIterationDrafts((prev) => ({
+                                ...prev,
+                                [fieldId]: {
+                                  ...(prev[fieldId] ?? {
+                                    open: true,
+                                    value: field.value,
+                                    versionTag: '',
+                                    reasonType: 'manual',
+                                    reasonText: '',
+                                    reasonCardId: '',
+                                  }),
+                                  versionTag: event.target.value,
+                                },
+                              }))
+                            }
+                            placeholder="版本标签，例如：v1 / v2 / 终稿"
                           />
                           <div className={styles.fieldRelationAdd}>
                             <select
@@ -4120,6 +4254,7 @@ export function SettingView({
                                     ...(prev[fieldId] ?? {
                                       open: true,
                                       value: field.value,
+                                      versionTag: '',
                                       reasonType: 'manual',
                                       reasonText: '',
                                       reasonCardId: '',
@@ -4143,6 +4278,7 @@ export function SettingView({
                                       ...(prev[fieldId] ?? {
                                         open: true,
                                         value: field.value,
+                                        versionTag: '',
                                         reasonType: 'card',
                                         reasonText: '',
                                         reasonCardId: '',
@@ -4172,6 +4308,7 @@ export function SettingView({
                                       ...(prev[fieldId] ?? {
                                         open: true,
                                         value: field.value,
+                                        versionTag: '',
                                         reasonType: 'manual',
                                         reasonText: '',
                                         reasonCardId: '',
