@@ -20,7 +20,23 @@ export interface SettingCard {
   customFields?: SettingCustomField[];
   color: string;
   position: { x: number; y: number };
-  relations: { targetId: string; type: string }[];
+  relations: {
+    targetId: string;
+    type: string;
+    sourceFieldId?: string;
+    targetFieldId?: string;
+  }[];
+  summaryIterations?: SettingSummaryIteration[];
+  activeSummaryIterationId?: string;
+}
+
+export interface SettingSummaryIteration {
+  id: string;
+  value: string;
+  reasonType: 'manual' | 'card';
+  reasonText?: string;
+  reasonCardId?: string;
+  createdAt: string;
 }
 
 export interface SettingCustomField {
@@ -32,6 +48,17 @@ export interface SettingCustomField {
   y?: number;
   w?: number;
   h?: number;
+  iterations?: SettingFieldIteration[];
+  activeIterationId?: string;
+}
+
+export interface SettingFieldIteration {
+  id: string;
+  value: string;
+  reasonType: 'manual' | 'card';
+  reasonText?: string;
+  reasonCardId?: string;
+  createdAt: string;
 }
 
 export interface SettingTemplate {
