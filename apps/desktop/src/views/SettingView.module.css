@@ -1565,15 +1565,47 @@
   overflow: hidden;
 }
 
+.iterationDrawerToggle {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: 7px var(--space-2);
+  min-height: 34px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  background: var(--slate-50);
+  color: var(--slate-600);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  transition: all var(--transition-fast);
+}
+
+.iterationDrawerToggle:hover {
+  border-color: var(--coral-300);
+  background: var(--coral-50);
+  color: var(--coral-600);
+}
+
+.iterationReasonChip {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .currentIterationBadge {
   display: inline-flex;
   align-items: center;
   max-width: 320px;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--coral-50) 75%, white);
-  color: var(--slate-600);
+  border: 1px solid var(--rose-600);
+  background: var(--rose-600);
+  color: #fff;
   font-size: 11px;
   line-height: 1.3;
   white-space: nowrap;
@@ -1584,9 +1616,9 @@
 .iterationVersionTag {
   display: inline-flex;
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--coral-300) 65%, var(--border-light));
-  background: color-mix(in srgb, var(--coral-50) 82%, white);
-  color: var(--coral-700);
+  border: 1px solid var(--rose-600);
+  background: var(--rose-600);
+  color: #fff;
   border-radius: var(--radius-full);
   padding: 1px 8px;
   font-size: 11px;
@@ -2744,6 +2776,18 @@
     background: var(--slate-800);
     border-color: var(--slate-600);
     color: var(--slate-100);
+  }
+
+  .iterationDrawerToggle {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+    color: var(--slate-300);
+  }
+
+  .iterationDrawerToggle:hover {
+    border-color: var(--coral-400);
+    background: rgba(249, 107, 71, 0.16);
+    color: var(--coral-200);
   }
 
   .addRelationBtn {

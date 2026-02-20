@@ -717,6 +717,8 @@ export function SettingView({
     reasonText: '',
     reasonCardId: '',
   });
+  const [summaryIterationDrawerOpen, setSummaryIterationDrawerOpen] = useState(false);
+  const [fieldIterationDrawersOpen, setFieldIterationDrawersOpen] = useState<Record<string, boolean>>({});
 
   const [globalTags, setGlobalTags] = useState<SettingTag[]>(() => globalLibrary.tags ?? []);
   const [storyTags, setStoryTags] = useState<SettingTag[]>(() => storyLibrary.tags ?? []);
@@ -3891,50 +3893,65 @@ export function SettingView({
                   )}
 
                   {(selectedCard.summaryIterations ?? []).length > 0 && (
-                    <div className={styles.iterationSwitcherRow}>
-                      <span className={styles.iterationSwitcherLabel}>当前摘要版本</span>
-                      <select
-                        className={styles.iterationSwitcherSelect}
-                        value={selectedCard.activeSummaryIterationId ?? ''}
-                        onChange={(event) => {
-                          if (event.target.value) {
-                            setSummaryIterationAsCurrent(event.target.value);
-                          }
-                        }}
-                      >
-                        {(selectedCard.summaryIterations ?? []).map((iteration) => (
-                          <option key={`summary-switch-${iteration.id}`} value={iteration.id}>
-                            {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <button
+                      type="button"
+                      className={styles.iterationDrawerToggle}
+                      onClick={() => setSummaryIterationDrawerOpen((prev) => !prev)}
+                    >
+                      <span>{summaryIterationDrawerOpen ? '收起' : '展开'}摘要历史 ({(selectedCard.summaryIterations ?? []).length})</span>
+                      <span className={styles.toggleArrow}>{summaryIterationDrawerOpen ? '▲' : '▼'}</span>
+                    </button>
                   )}
 
-                  <div className={styles.iterationList}>
-                    {(selectedCard.summaryIterations ?? []).map((iteration) => (
-                      <div key={iteration.id} className={styles.iterationItem}>
-                        {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
-                        <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                        <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
-                        <p className={styles.templatePickMeta}>原因：{resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}</p>
-                        <div className={styles.managerActionsRow}>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className={styles.inlineActionButton}
-                            onClick={() => setSummaryIterationAsCurrent(iteration.id)}
-                            disabled={selectedCard.activeSummaryIterationId === iteration.id}
-                          >
-                            {selectedCard.activeSummaryIterationId === iteration.id ? '当前版本' : '设为当前'}
-                          </Button>
-                          <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openSummaryIterationDraft(iteration)}>
-                            修改原因
-                          </Button>
-                        </div>
+                  {summaryIterationDrawerOpen && (selectedCard.summaryIterations ?? []).length > 0 && (
+                    <>
+                      <div className={styles.iterationSwitcherRow}>
+                        <span className={styles.iterationSwitcherLabel}>当前摘要版本</span>
+                        <select
+                          className={styles.iterationSwitcherSelect}
+                          value={selectedCard.activeSummaryIterationId ?? ''}
+                          onChange={(event) => {
+                            if (event.target.value) {
+                              setSummaryIterationAsCurrent(event.target.value);
+                            }
+                          }}
+                        >
+                          {(selectedCard.summaryIterations ?? []).map((iteration) => (
+                            <option key={`summary-switch-${iteration.id}`} value={iteration.id}>
+                              {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className={styles.iterationList}>
+                        {(selectedCard.summaryIterations ?? []).map((iteration) => (
+                          <div key={iteration.id} className={styles.iterationItem}>
+                            {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
+                            <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
+                            <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
+                            <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}>
+                              {resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}
+                            </span>
+                            <div className={styles.managerActionsRow}>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className={styles.inlineActionButton}
+                                onClick={() => setSummaryIterationAsCurrent(iteration.id)}
+                                disabled={selectedCard.activeSummaryIterationId === iteration.id}
+                              >
+                                {selectedCard.activeSummaryIterationId === iteration.id ? '当前版本' : '设为当前'}
+                              </Button>
+                              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openSummaryIterationDraft(iteration)}>
+                                修改原因
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className={styles.fixedMetaField}>
@@ -4151,51 +4168,64 @@ export function SettingView({
                       />
 
                       {(field.iterations ?? []).length > 0 && (
-                        <div className={styles.iterationSwitcherRow}>
-                          <span className={styles.iterationSwitcherLabel}>当前属性版本</span>
-                          <select
-                            className={styles.iterationSwitcherSelect}
-                            value={field.activeIterationId ?? ''}
-                            onChange={(event) => {
-                              if (event.target.value) {
-                                setFieldIterationAsCurrent(index, event.target.value);
-                              }
-                            }}
-                          >
-                            {(field.iterations ?? []).map((iteration) => (
-                              <option key={`field-switch-${fieldId}-${iteration.id}`} value={iteration.id}>
-                                {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <button
+                          type="button"
+                          className={styles.iterationDrawerToggle}
+                          onClick={() => setFieldIterationDrawersOpen((prev) => ({ ...prev, [fieldId]: !prev[fieldId] }))}
+                        >
+                          <span>{fieldIterationDrawersOpen[fieldId] ? '收起' : '展开'}属性历史 ({(field.iterations ?? []).length})</span>
+                          <span className={styles.toggleArrow}>{fieldIterationDrawersOpen[fieldId] ? '▲' : '▼'}</span>
+                        </button>
                       )}
 
-                      {(field.iterations ?? []).length > 0 && (
-                        <div className={styles.iterationList}>
-                          {(field.iterations ?? []).map((iteration) => (
-                            <div key={iteration.id} className={styles.iterationItem}>
-                              {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
-                              <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                              <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
-                              <p className={styles.templatePickMeta}>原因：{resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}</p>
-                              <div className={styles.managerActionsRow}>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className={styles.inlineActionButton}
-                                  onClick={() => setFieldIterationAsCurrent(index, iteration.id)}
-                                  disabled={field.activeIterationId === iteration.id}
-                                >
-                                  {field.activeIterationId === iteration.id ? '当前版本' : '设为当前'}
-                                </Button>
-                                <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openFieldIterationDraft(field, iteration)}>
-                                  修改原因
-                                </Button>
+                      {fieldIterationDrawersOpen[fieldId] && (field.iterations ?? []).length > 0 && (
+                        <>
+                          <div className={styles.iterationSwitcherRow}>
+                            <span className={styles.iterationSwitcherLabel}>当前属性版本</span>
+                            <select
+                              className={styles.iterationSwitcherSelect}
+                              value={field.activeIterationId ?? ''}
+                              onChange={(event) => {
+                                if (event.target.value) {
+                                  setFieldIterationAsCurrent(index, event.target.value);
+                                }
+                              }}
+                            >
+                              {(field.iterations ?? []).map((iteration) => (
+                                <option key={`field-switch-${fieldId}-${iteration.id}`} value={iteration.id}>
+                                  {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className={styles.iterationList}>
+                            {(field.iterations ?? []).map((iteration) => (
+                              <div key={iteration.id} className={styles.iterationItem}>
+                                {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
+                                <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
+                                <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
+                                <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}>
+                                  {resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}
+                                </span>
+                                <div className={styles.managerActionsRow}>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className={styles.inlineActionButton}
+                                    onClick={() => setFieldIterationAsCurrent(index, iteration.id)}
+                                    disabled={field.activeIterationId === iteration.id}
+                                  >
+                                    {field.activeIterationId === iteration.id ? '当前版本' : '设为当前'}
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openFieldIterationDraft(field, iteration)}>
+                                    修改原因
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        </>
                       )}
 
                       {(fieldIterationDrafts[fieldId]?.open ?? false) && (
