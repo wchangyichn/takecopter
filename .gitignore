@@ -11,3 +11,5 @@ apps/desktop/dist/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/.vite/
+项目预设.md
+docs/PRD.md
