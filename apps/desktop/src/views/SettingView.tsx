@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Panel } from '../components/ui';
-import type { SettingCard, SettingCustomField, SettingFieldIteration, SettingLibrary, SettingSummaryIteration, SettingTag, SettingTemplate } from '../types';
+import type { SettingCard, SettingCardIteration, SettingCustomField, SettingFieldIteration, SettingLibrary, SettingSummaryIteration, SettingTag, SettingTemplate } from '../types';
 import styles from './SettingView.module.css';
 
 const cardPalette = ['var(--coral-400)', 'var(--violet-400)', 'var(--teal-400)', 'var(--amber-400)', 'var(--rose-400)'];
@@ -10,7 +10,9 @@ const FIELD_UNIT_WIDTH = 220;
 const FIELD_UNIT_HEIGHT = 140;
 const MODEL_KEY_STORAGE = 'takecopter.desktop.model-api-keys.v1';
 const POLISH_PROMPTS_STORAGE = 'takecopter.desktop.polish-prompts.v1';
-const DEFAULT_DEPENDENCY_STORAGE = 'takecopter.desktop.default-dependencies.v1';
+
+const AI_CHANNEL_STORAGE = 'takecopter.desktop.ai-channel.v1';
+const AI_MODEL_STORAGE = 'takecopter.desktop.active-ai-model.v1';
 const MODEL_OPTIONS = [
   { id: 'openai:gpt-4.1', label: 'OpenAI（GPT-4.1）', webUrl: 'https://chatgpt.com/' },
   { id: 'anthropic:claude-3.7-sonnet', label: 'Anthropic（Claude 3.7 Sonnet）', webUrl: 'https://claude.ai/' },
@@ -34,12 +36,11 @@ type QuickCreateOption = {
   type?: SettingCard['type'];
   category?: string;
   titlePrefix: string;
-  useDefaultDependency?: boolean;
 };
 
 const QUICK_CREATE_OPTIONS: QuickCreateOption[] = [
-  { key: 'blank', label: '空白卡', summary: '完全空白，不预设属性，不自动关联默认依赖。', titlePrefix: '空白卡', useDefaultDependency: false },
-  { key: 'worldview', label: '世界观卡', summary: '空白世界观卡，仅预设分类为“世界观”，内容由你自行定义。', type: 'location', category: '世界观', titlePrefix: '世界观卡' },
+  { key: 'blank', label: '空白卡', summary: '完全空白，不预设属性。', titlePrefix: '空白卡' },
+  { key: 'worldview', label: '世界观卡', summary: '空白世界观卡，仅预设分类为"世界观"，内容由你自行定义。', type: 'location', category: '世界观', titlePrefix: '世界观卡' },
   { key: 'character', label: '角色卡', summary: '创建空白角色卡，后续按故事需要自由补充。', type: 'character', category: '角色', titlePrefix: '角色卡' },
   { key: 'location', label: '地点卡', summary: '创建空白地点卡，适配世界观、势力、场景等设定。', type: 'location', category: '地点', titlePrefix: '地点卡' },
   { key: 'item', label: '物品卡', summary: '创建空白物品卡，适配道具、能力、资源等设定。', type: 'item', category: '道具', titlePrefix: '物品卡' },
@@ -64,7 +65,7 @@ type ModelApiKeyEntry = {
 };
 
 type ModelApiKeyState = Record<string, ModelApiKeyEntry>;
-type DefaultDependencyState = Record<SettingCard['type'], string[]>;
+
 
 type AiFieldSuggestion = {
   name: string;
@@ -112,8 +113,19 @@ type AiUndoEntry = {
 };
 
 type AiActionKind = 'summary' | 'fields' | 'normalize' | 'field';
+type AiChannel = 'internal' | 'external';
 
-type AiGuideMode = 'describe' | 'summaryToFields' | 'reviewCard' | 'polish' | 'fieldsToSummary';
+type AiGuideMode = 'describe' | 'summaryToFields' | 'reviewCard' | 'polish' | 'fieldsToSummary' | 'fieldPolish';
+
+type ExternalAiPayload = {
+  taskType?: string;
+  cardId?: string;
+  result?: unknown;
+  summary?: unknown;
+  suggestions?: unknown;
+  patch?: unknown;
+  field?: unknown;
+};
 
 type RecentPolishPrompt = {
   id: string;
@@ -207,41 +219,6 @@ function readModelApiKeys(): ModelApiKeyState {
     );
   } catch {
     return {};
-  }
-}
-
-function readDefaultDependencyState(): DefaultDependencyState {
-  const empty: DefaultDependencyState = {
-    character: [],
-    location: [],
-    item: [],
-    event: [],
-  };
-
-  if (typeof window === 'undefined') {
-    return empty;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(DEFAULT_DEPENDENCY_STORAGE);
-    if (!raw) {
-      return empty;
-    }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const normalize = (value: unknown): string[] => {
-      if (!Array.isArray(value)) {
-        return [];
-      }
-      return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-    };
-    return {
-      character: normalize(parsed.character),
-      location: normalize(parsed.location),
-      item: normalize(parsed.item),
-      event: normalize(parsed.event),
-    };
-  } catch {
-    return empty;
   }
 }
 
@@ -519,6 +496,43 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
             }))
         : [],
       activeSummaryIterationId: typeof card.activeSummaryIterationId === 'string' ? card.activeSummaryIterationId : undefined,
+      cardIterations: Array.isArray(card.cardIterations)
+        ? card.cardIterations
+            .filter((item) => Boolean(item) && typeof item.id === 'string' && item.snapshot && typeof item.snapshot === 'object')
+            .map((item) => ({
+              id: item.id,
+              snapshot: {
+                title: typeof item.snapshot.title === 'string' ? item.snapshot.title : card.title,
+                summary: typeof item.snapshot.summary === 'string' ? item.snapshot.summary : card.summary,
+                category: typeof item.snapshot.category === 'string' ? item.snapshot.category : undefined,
+                tags: Array.isArray(item.snapshot.tags)
+                  ? item.snapshot.tags
+                      .filter((tag) => Boolean(tag) && typeof tag.name === 'string')
+                      .map((tag) => ({ name: tag.name, color: typeof tag.color === 'string' ? tag.color : randomTagColor() }))
+                  : (card.tags ?? []).map((tag) => ({ ...tag })),
+                customFields: Array.isArray(item.snapshot.customFields)
+                  ? item.snapshot.customFields.map((field, index) => ({
+                      id: field.id ?? `field-${uniqueId}-iter-${index + 1}`,
+                      name: field.name,
+                      value: field.value,
+                      size: field.size,
+                      x: field.x,
+                      y: field.y,
+                      w: field.w,
+                      h: field.h,
+                      iterations: Array.isArray(field.iterations) ? field.iterations.map((iter) => ({ ...iter })) : [],
+                      activeIterationId: field.activeIterationId,
+                    }))
+                  : (card.customFields ?? []).map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+              },
+              versionTag: typeof item.versionTag === 'string' ? item.versionTag : undefined,
+              reasonType: item.reasonType === 'card' ? 'card' : 'manual',
+              reasonText: typeof item.reasonText === 'string' ? item.reasonText : undefined,
+              reasonCardId: typeof item.reasonCardId === 'string' ? item.reasonCardId : undefined,
+              createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+            }))
+        : [],
+      activeCardIterationId: typeof card.activeCardIterationId === 'string' ? card.activeCardIterationId : undefined,
     };
   });
 }
@@ -534,6 +548,14 @@ function cloneEditableCard(card: EditableCard): EditableCard {
     })),
     relations: card.relations.map((relation) => ({ ...relation })),
     summaryIterations: (card.summaryIterations ?? []).map((iteration) => ({ ...iteration })),
+    cardIterations: (card.cardIterations ?? []).map((iteration) => ({
+      ...iteration,
+      snapshot: {
+        ...iteration.snapshot,
+        tags: iteration.snapshot.tags.map((tag) => ({ ...tag })),
+        customFields: iteration.snapshot.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+      },
+    })),
   };
 }
 
@@ -628,18 +650,18 @@ export function SettingView({
   const [toolbarTagQuery, setToolbarTagQuery] = useState('');
   const [toolbarTagActiveIndex, setToolbarTagActiveIndex] = useState(0);
 
-  const [detailTagSearchOpen, setDetailTagSearchOpen] = useState(false);
-  const [detailTagQuery, setDetailTagQuery] = useState('');
+  const [isDetailTagModalOpen, setIsDetailTagModalOpen] = useState(false);
+  const [detailTagDraft, setDetailTagDraft] = useState('');
+  const [detailTagColorDraft, setDetailTagColorDraft] = useState(() => randomTagColor());
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [fieldRelationOpen, setFieldRelationOpen] = useState<Record<string, boolean>>({});
   const [fieldRelationTarget, setFieldRelationTarget] = useState<Record<string, string>>({});
   const [fieldRelationType, setFieldRelationType] = useState<Record<string, string>>({});
   const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null);
   const [dragOverField, setDragOverField] = useState<{ id: string; placement: 'before' | 'after' } | null>(null);
-  const [newCustomFieldName, setNewCustomFieldName] = useState('');
+  const [isDependencyEditorOpen, setIsDependencyEditorOpen] = useState(false);
   const [newCardNameDraft, setNewCardNameDraft] = useState('');
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
-  const [isDefaultDependencyOpen, setIsDefaultDependencyOpen] = useState(false);
   const [isCardRenameOpen, setIsCardRenameOpen] = useState(false);
   const [renameCardDraft, setRenameCardDraft] = useState('');
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
@@ -651,7 +673,21 @@ export function SettingView({
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateScope, setTemplateScope] = useState<'global' | 'story'>('global');
-  const [activeAiModelId, setActiveAiModelId] = useState<AiModelId>(MODEL_OPTIONS[0].id);
+  const [activeAiModelId, setActiveAiModelId] = useState<AiModelId>(() => {
+    if (typeof window === 'undefined') {
+      return MODEL_OPTIONS[0].id;
+    }
+    const saved = window.localStorage.getItem(AI_MODEL_STORAGE);
+    const matched = MODEL_OPTIONS.find((item) => item.id === saved);
+    return matched?.id ?? MODEL_OPTIONS[0].id;
+  });
+  const [preferredAiChannel, setPreferredAiChannel] = useState<AiChannel>(() => {
+    if (typeof window === 'undefined') {
+      return 'internal';
+    }
+    const saved = window.localStorage.getItem(AI_CHANNEL_STORAGE);
+    return saved === 'external' ? 'external' : 'internal';
+  });
   const [isAiResultOpen, setIsAiResultOpen] = useState(false);
   const [isAiGuideOpen, setIsAiGuideOpen] = useState(false);
   const [isExternalAiOpen, setIsExternalAiOpen] = useState(false);
@@ -685,9 +721,11 @@ export function SettingView({
   const [selectedSuggestionNames, setSelectedSuggestionNames] = useState<string[]>([]);
   const [externalPrompt, setExternalPrompt] = useState('');
   const [externalPromptMode, setExternalPromptMode] = useState<AiGuideMode>('describe');
+  const [externalFieldTarget, setExternalFieldTarget] = useState<{ fieldId?: string; name: string; value: string } | null>(null);
   const [externalResponseInput, setExternalResponseInput] = useState('');
   const [externalResponseError, setExternalResponseError] = useState<string | null>(null);
   const [externalResponseSchemaErrors, setExternalResponseSchemaErrors] = useState<string[]>([]);
+  const [aiContextNotice, setAiContextNotice] = useState<string | null>(null);
   const [isAiHistoryOpen, setIsAiHistoryOpen] = useState(false);
   const [normalizeShowSelectedOnly, setNormalizeShowSelectedOnly] = useState(false);
   const [aiUndoStack, setAiUndoStack] = useState<AiUndoEntry[]>([]);
@@ -704,8 +742,6 @@ export function SettingView({
   const [editingCategoryValue, setEditingCategoryValue] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editingTemplateValue, setEditingTemplateValue] = useState('');
-  const [defaultDependencyType, setDefaultDependencyType] = useState<SettingCard['type']>('character');
-  const [defaultDependencyMap, setDefaultDependencyMap] = useState<DefaultDependencyState>(() => readDefaultDependencyState());
   const [cardDependencyTarget, setCardDependencyTarget] = useState('');
   const [cardDependencyType, setCardDependencyType] = useState('参考');
   const [fieldIterationDrafts, setFieldIterationDrafts] = useState<Record<string, IterationDraftState>>({});
@@ -719,6 +755,16 @@ export function SettingView({
   });
   const [summaryIterationDrawerOpen, setSummaryIterationDrawerOpen] = useState(false);
   const [fieldIterationDrawersOpen, setFieldIterationDrawersOpen] = useState<Record<string, boolean>>({});
+  const [isCardIterationHistoryOpen, setIsCardIterationHistoryOpen] = useState(false);
+  const [editingCardIterationId, setEditingCardIterationId] = useState<string | null>(null);
+  const [editingCardIterationVersionTag, setEditingCardIterationVersionTag] = useState('');
+  const [cardIterationDraft, setCardIterationDraft] = useState<Omit<IterationDraftState, 'value'>>({
+    open: false,
+    versionTag: '',
+    reasonType: 'manual',
+    reasonText: '',
+    reasonCardId: '',
+  });
 
   const [globalTags, setGlobalTags] = useState<SettingTag[]>(() => globalLibrary.tags ?? []);
   const [storyTags, setStoryTags] = useState<SettingTag[]>(() => storyLibrary.tags ?? []);
@@ -726,6 +772,9 @@ export function SettingView({
   const [storyCategories, setStoryCategories] = useState<string[]>(() => storyLibrary.categories ?? []);
   const [globalTemplates, setGlobalTemplates] = useState<SettingTemplate[]>(() => globalLibrary.templates ?? []);
   const [storyTemplates, setStoryTemplates] = useState<SettingTemplate[]>(() => storyLibrary.templates ?? []);
+  const [isCustomFieldEditorOpen, setIsCustomFieldEditorOpen] = useState(true);
+  const [customFieldDrafts, setCustomFieldDrafts] = useState<SettingCustomField[]>([]);
+  const [pendingCustomFieldId, setPendingCustomFieldId] = useState<string | null>(null);
 
   const [dragState, setDragState] = useState<DragState | null>(null);
 
@@ -735,11 +784,11 @@ export function SettingView({
   const selectedCardIdRef = useRef<string | null>(selectedCardId);
   const canvasPointerRef = useRef<{ id: string; moved: boolean } | null>(null);
   const toolbarSearchRef = useRef<HTMLDivElement | null>(null);
-  const detailSearchRef = useRef<HTMLDivElement | null>(null);
   const externalResponseRef = useRef<HTMLTextAreaElement | null>(null);
   const polishPromptResolverRef = useRef<((value: string | null) => void) | null>(null);
   const confirmActionRef = useRef<(() => void) | null>(null);
   const persistTimerRef = useRef<number | null>(null);
+  const customFieldDraftCardIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedCardIdRef.current = selectedCardId;
@@ -760,8 +809,15 @@ export function SettingView({
     if (typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(DEFAULT_DEPENDENCY_STORAGE, JSON.stringify(defaultDependencyMap));
-  }, [defaultDependencyMap]);
+    window.localStorage.setItem(AI_CHANNEL_STORAGE, preferredAiChannel);
+  }, [preferredAiChannel]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(AI_MODEL_STORAGE, activeAiModelId);
+  }, [activeAiModelId]);
 
   const categories = useMemo(() => {
     const set = new Set<string>([...globalCategories, ...storyCategories, ...uniqueCategories(cards)]);
@@ -769,6 +825,32 @@ export function SettingView({
   }, [cards, globalCategories, storyCategories]);
 
   const selectedCard = useMemo(() => cards.find((item) => item.id === selectedCardId) ?? null, [cards, selectedCardId]);
+
+  useEffect(() => {
+    if (!selectedCard) {
+      setCustomFieldDrafts([]);
+      setIsCustomFieldEditorOpen(true);
+      setPendingCustomFieldId(null);
+      customFieldDraftCardIdRef.current = null;
+      return;
+    }
+    const normalized = selectedCard.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) }));
+
+    if (customFieldDraftCardIdRef.current !== selectedCard.id) {
+      customFieldDraftCardIdRef.current = selectedCard.id;
+      setCustomFieldDrafts(normalized);
+      setIsCustomFieldEditorOpen(true);
+      setPendingCustomFieldId(null);
+      return;
+    }
+
+    if (pendingCustomFieldId) {
+      return;
+    }
+
+    setCustomFieldDrafts(normalized);
+  }, [pendingCustomFieldId, selectedCard]);
+
   const openPreviewCards = useMemo(
     () => openPreviewCardIds.map((id) => cards.find((card) => card.id === id)).filter((card): card is EditableCard => Boolean(card)),
     [cards, openPreviewCardIds]
@@ -845,11 +927,6 @@ export function SettingView({
     [globalTemplates, storyTemplates]
   );
 
-  const defaultDependencyCandidates = useMemo(
-    () => cards.map((card) => ({ id: card.id, title: card.title || '未命名设定', typeLabel: cardTypeLabel(card.type) })),
-    [cards]
-  );
-
   const totalByCategory = useMemo(() => {
     return categoryEntries.reduce<Record<string, number>>((acc, item) => {
       acc[item.key] = item.count;
@@ -868,6 +945,33 @@ export function SettingView({
       !tagOptions.some((tag) => tag.name === normalizeTagName(toolbarTagQuery)),
     [tagOptions, toolbarTagQuery]
   );
+
+  const detailTagCandidates = useMemo(() => {
+    if (!selectedCard) {
+      return [] as SettingTag[];
+    }
+    const query = normalizeTagName(detailTagDraft).toLowerCase();
+    return tagOptions
+      .filter((tag) => !selectedCard.tags.some((item) => item.name === tag.name))
+      .filter((tag) => !query || tag.name.toLowerCase().includes(query));
+  }, [detailTagDraft, selectedCard, tagOptions]);
+
+  const detailTagCanCreate = useMemo(() => {
+    const normalized = normalizeTagName(detailTagDraft);
+    return Boolean(normalized) && !tagOptions.some((tag) => tag.name === normalized);
+  }, [detailTagDraft, tagOptions]);
+
+  const currentCardIterationTag = useMemo(() => {
+    if (!selectedCard) {
+      return '原始';
+    }
+    const active = (selectedCard.cardIterations ?? []).find((item) => item.id === selectedCard.activeCardIterationId);
+    if (!active) {
+      return '原始';
+    }
+    const next = active.versionTag?.trim();
+    return next && next.length > 0 ? next : '原始';
+  }, [selectedCard]);
 
   const toolbarActiveDescendant = useMemo(() => {
     if (!toolbarTagSearchOpen) {
@@ -1175,17 +1279,13 @@ export function SettingView({
         setToolbarTagActiveIndex(0);
       }
 
-      if (detailTagSearchOpen && detailSearchRef.current && !detailSearchRef.current.contains(target)) {
-        setDetailTagSearchOpen(false);
-        setDetailTagQuery('');
-      }
     };
 
     window.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [detailTagSearchOpen, toolbarTagSearchOpen]);
+  }, [toolbarTagSearchOpen]);
 
   const onCardMouseDown = (event: ReactMouseEvent<HTMLDivElement>, card: EditableCard) => {
     if (event.button !== 0) {
@@ -1253,7 +1353,6 @@ export function SettingView({
     forcedType?: SettingCard['type'],
     forcedCategory?: string,
     titlePrefix?: string,
-    useDefaultDependency = true
   ) => {
     const nextIndex = cards.length + 1;
     let nextId = '';
@@ -1263,9 +1362,6 @@ export function SettingView({
     } while (cards.some((card) => card.id === nextId));
     const nextCategory = forcedCategory ?? selectedCategory ?? template?.preset.category ?? undefined;
     const nextType = forcedType ?? template?.preset.type ?? 'event';
-    const defaultDependencyIds = useDefaultDependency
-      ? (defaultDependencyMap[nextType] ?? []).filter((id) => cards.some((card) => card.id === id))
-      : [];
     const normalizedName = nameInput?.trim();
     const created: EditableCard = {
       id: nextId,
@@ -1282,7 +1378,7 @@ export function SettingView({
         x: 120 + (nextIndex % 5) * 56,
         y: 100 + (nextIndex % 4) * 56,
       },
-      relations: defaultDependencyIds.map((dependencyId) => ({ targetId: dependencyId, type: '参考' })),
+      relations: [],
       summaryIterations: [],
     };
 
@@ -1436,13 +1532,6 @@ export function SettingView({
           });
           return remaining;
         });
-
-        setDefaultDependencyMap((prev) => ({
-          character: prev.character.filter((id) => id !== cardId),
-          location: prev.location.filter((id) => id !== cardId),
-          item: prev.item.filter((id) => id !== cardId),
-          event: prev.event.filter((id) => id !== cardId),
-        }));
       }
     );
   };
@@ -1550,54 +1639,104 @@ export function SettingView({
     }
   };
 
-  const handleAddCustomField = (name: string) => {
-    const normalized = name.trim();
-    if (!normalized || !selectedCard) {
+  const syncCustomFieldDraftsToSelected = (drafts: SettingCustomField[], pendingId: string | null) => {
+    updateSelectedCard((card) => ({
+      ...card,
+      customFields: drafts
+        .filter((field) => field.id !== pendingId)
+        .map((field) => ({
+          ...field,
+          name: field.name.trim(),
+        })),
+    }));
+  };
+
+  const handleAddCustomField = () => {
+    if (!selectedCard) {
+      return;
+    }
+
+    if (pendingCustomFieldId) {
       return;
     }
 
     templateIdRef.current += 1;
     const fieldId = `field-local-${templateIdRef.current}`;
 
-    updateSelectedCard((card) => {
-      if (card.customFields.some((field) => field.name === normalized)) {
-        return card;
-      }
-
-      const nextIndex = card.customFields.length;
-
-      return {
-        ...card,
-        customFields: [
-          ...card.customFields,
-          {
-            id: fieldId,
-            name: normalized,
-            value: '',
-            size: 'md',
-            x: (nextIndex % 3) * (FIELD_UNIT_WIDTH + 12),
-            y: Math.floor(nextIndex / 3) * (FIELD_UNIT_HEIGHT + 12),
-            w: 1,
-            h: 1,
-          },
-        ],
-      };
+    setCustomFieldDrafts((prev) => {
+      const nextIndex = prev.length;
+      return [
+        {
+          id: fieldId,
+          name: `设定 ${nextIndex + 1}`,
+          value: '',
+          size: 'md',
+          x: 0,
+          y: 0,
+          w: 1,
+          h: 1,
+        },
+        ...prev,
+      ];
     });
-    setNewCustomFieldName('');
+    setIsCustomFieldEditorOpen(true);
+    setPendingCustomFieldId(fieldId);
   };
 
   const handleUpdateCustomField = (index: number, nextField: Partial<SettingCustomField>) => {
-    updateSelectedCard((card) => ({
-      ...card,
-      customFields: card.customFields.map((field, currentIndex) =>
+    setCustomFieldDrafts((prev) => {
+      const nextDrafts = prev.map((field, currentIndex) =>
         currentIndex === index
           ? {
               ...field,
               ...nextField,
             }
           : field
-      ),
+      );
+      syncCustomFieldDraftsToSelected(nextDrafts, pendingCustomFieldId);
+      return nextDrafts;
+    });
+  };
+
+  const handleConfirmPendingCustomField = () => {
+    if (!selectedCard || !pendingCustomFieldId) {
+      return;
+    }
+
+    const pendingField = customFieldDrafts.find((field) => field.id === pendingCustomFieldId);
+    const pendingName = pendingField?.name.trim() ?? '';
+    if (!pendingName) {
+      window.alert('设定名称不能为空');
+      return;
+    }
+
+    const nextDrafts = customFieldDrafts.map((field) =>
+      field.id === pendingCustomFieldId
+        ? {
+            ...field,
+            name: pendingName,
+          }
+        : field
+    );
+    setPendingCustomFieldId(null);
+    setCustomFieldDrafts(nextDrafts);
+    updateSelectedCard((card) => ({
+      ...card,
+      customFields: nextDrafts.map((field) => ({
+        ...field,
+        name: field.name.trim(),
+      })),
     }));
+  };
+
+  const handleCancelPendingCustomField = () => {
+    if (!pendingCustomFieldId) {
+      return;
+    }
+    const nextDrafts = customFieldDrafts.filter((field) => field.id !== pendingCustomFieldId);
+    setCustomFieldDrafts(nextDrafts);
+    setPendingCustomFieldId(null);
+    syncCustomFieldDraftsToSelected(nextDrafts, null);
   };
 
   const handleDeleteCustomField = (index: number) => {
@@ -1605,19 +1744,21 @@ export function SettingView({
       return;
     }
 
-    const fieldName = selectedCard.customFields[index]?.name?.trim() || `属性 ${index + 1}`;
-    const deletingFieldId = selectedCard.customFields[index]?.id;
+    const fieldName = customFieldDrafts[index]?.name?.trim() || `设定 ${index + 1}`;
+    const deletingFieldId = customFieldDrafts[index]?.id;
     openConfirmDialog(
       {
-        title: '删除属性',
-        message: `确定删除属性“${fieldName}”？该属性上的关联也会一并删除。`,
+        title: '删除设定',
+        message: `确定删除设定“${fieldName}”？该设定上的关联也会一并删除。`,
         confirmLabel: '删除',
       },
       () => {
-        updateSelectedCard((card) => ({
-          ...card,
-          customFields: card.customFields.filter((_, currentIndex) => currentIndex !== index),
-        }));
+        const nextDrafts = customFieldDrafts.filter((_, currentIndex) => currentIndex !== index);
+        setCustomFieldDrafts(nextDrafts);
+        if (deletingFieldId && deletingFieldId === pendingCustomFieldId) {
+          setPendingCustomFieldId(null);
+        }
+        syncCustomFieldDraftsToSelected(nextDrafts, deletingFieldId && deletingFieldId === pendingCustomFieldId ? null : pendingCustomFieldId);
 
         if (!deletingFieldId) {
           return;
@@ -1651,14 +1792,14 @@ export function SettingView({
       return;
     }
 
-    updateSelectedCard((card) => {
-      const fromIndex = card.customFields.findIndex((field) => field.id === fromId);
-      const toIndex = card.customFields.findIndex((field) => field.id === toId);
+    setCustomFieldDrafts((prev) => {
+      const fromIndex = prev.findIndex((field) => field.id === fromId);
+      const toIndex = prev.findIndex((field) => field.id === toId);
       if (fromIndex === -1 || toIndex === -1) {
-        return card;
+        return prev;
       }
 
-      const nextFields = [...card.customFields];
+      const nextFields = [...prev];
       const [moved] = nextFields.splice(fromIndex, 1);
       let insertIndex = toIndex;
       if (fromIndex < toIndex) {
@@ -1670,10 +1811,8 @@ export function SettingView({
       insertIndex = Math.max(0, Math.min(nextFields.length, insertIndex));
       nextFields.splice(insertIndex, 0, moved);
 
-      return {
-        ...card,
-        customFields: nextFields,
-      };
+      syncCustomFieldDraftsToSelected(nextFields, pendingCustomFieldId);
+      return nextFields;
     });
   };
 
@@ -1769,25 +1908,6 @@ export function SettingView({
     setCardDependencyType('参考');
   };
 
-  const toggleDefaultDependency = (type: SettingCard['type'], targetId: string) => {
-    setDefaultDependencyMap((prev) => {
-      const current = prev[type] ?? [];
-      const exists = current.includes(targetId);
-      return {
-        ...prev,
-        [type]: exists ? current.filter((id) => id !== targetId) : [...current, targetId],
-      };
-    });
-  };
-
-  const isCardDefaultDependencyForType = (cardId: string, type: SettingCard['type']) => {
-    return (defaultDependencyMap[type] ?? []).includes(cardId);
-  };
-
-  const toggleCardDefaultDependencyForType = (cardId: string, type: SettingCard['type']) => {
-    toggleDefaultDependency(type, cardId);
-  };
-
   const resolveIterationReasonLabel = (reasonType: IterationReasonType, reasonText?: string, reasonCardId?: string): string => {
     if (reasonType === 'card') {
       const target = cards.find((card) => card.id === reasonCardId);
@@ -1806,6 +1926,11 @@ export function SettingView({
     const timeLabel = new Date(createdAt).toLocaleString('zh-CN');
     const reasonLabel = resolveIterationReasonLabel(reasonType, reasonText, reasonCardId);
     return `${versionTag?.trim() || '未标记版本'} · ${timeLabel} · ${reasonLabel}`;
+  };
+
+  const resolveCardIterationTag = (iteration: SettingCardIteration): string => {
+    const next = iteration.versionTag?.trim();
+    return next && next.length > 0 ? next : '原始';
   };
 
   const getCurrentFieldIterationMeta = (field: SettingCustomField): string | null => {
@@ -2080,6 +2205,122 @@ export function SettingView({
     });
   };
 
+  const openCardIterationDraft = () => {
+    setCardIterationDraft({
+      open: true,
+      versionTag: '',
+      reasonType: 'manual',
+      reasonText: '',
+      reasonCardId: '',
+    });
+  };
+
+  const closeCardIterationDraft = () => {
+    setCardIterationDraft({
+      open: false,
+      versionTag: '',
+      reasonType: 'manual',
+      reasonText: '',
+      reasonCardId: '',
+    });
+  };
+
+  const saveCardIteration = () => {
+    if (!selectedCard) {
+      return;
+    }
+
+    const snapshot = {
+      title: selectedCard.title,
+      summary: selectedCard.summary,
+      category: selectedCard.category,
+      tags: selectedCard.tags.map((tag) => ({ ...tag })),
+      customFields: selectedCard.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+    };
+
+    const nextVersionTag = cardIterationDraft.versionTag.trim();
+    const reasonText = cardIterationDraft.reasonText.trim();
+
+    const hasExistingIterations = (selectedCard.cardIterations ?? []).length > 0;
+    const nextIteration: SettingCardIteration = {
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `card-iter-${Date.now()}`,
+      snapshot,
+      versionTag: nextVersionTag || (hasExistingIterations ? undefined : '原始'),
+      reasonType: cardIterationDraft.reasonType,
+      reasonText: cardIterationDraft.reasonType === 'manual' ? reasonText : undefined,
+      reasonCardId: cardIterationDraft.reasonType === 'card' ? cardIterationDraft.reasonCardId : undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    updateSelectedCard((card) => ({
+      ...card,
+      cardIterations: [nextIteration, ...(card.cardIterations ?? [])],
+      activeCardIterationId: nextIteration.id,
+    }));
+
+    closeCardIterationDraft();
+    setIsCardIterationHistoryOpen(true);
+  };
+
+  const setCardIterationAsCurrent = (iterationId: string) => {
+    updateSelectedCard((card) => {
+      const target = (card.cardIterations ?? []).find((item) => item.id === iterationId);
+      if (!target) {
+        return card;
+      }
+      return {
+        ...card,
+        title: target.snapshot.title,
+        summary: target.snapshot.summary,
+        category: target.snapshot.category,
+        tags: target.snapshot.tags.map((tag) => ({ ...tag })),
+        customFields: target.snapshot.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+        activeCardIterationId: target.id,
+      };
+    });
+  };
+
+  const startRenameCardIteration = (iteration: SettingCardIteration) => {
+    setEditingCardIterationId(iteration.id);
+    setEditingCardIterationVersionTag(resolveCardIterationTag(iteration));
+  };
+
+  const saveCardIterationRename = () => {
+    const targetId = editingCardIterationId;
+    if (!targetId) {
+      return;
+    }
+
+    const nextTag = editingCardIterationVersionTag.trim();
+    if (!nextTag) {
+      window.alert('迭代名称不能为空');
+      return;
+    }
+
+    updateSelectedCard((card) => ({
+      ...card,
+      cardIterations: (card.cardIterations ?? []).map((iteration) =>
+        iteration.id === targetId
+          ? {
+              ...iteration,
+              versionTag: nextTag,
+            }
+          : iteration
+      ),
+    }));
+
+    setEditingCardIterationId(null);
+    setEditingCardIterationVersionTag('');
+  };
+
+  const runAiActionByPreferredChannel = (mode: AiGuideMode, runInternal: () => void, fieldTarget?: { fieldId?: string; name: string; value: string }) => {
+    if (preferredAiChannel === 'external') {
+      void handleOpenExternalAi(mode, fieldTarget);
+      return;
+    }
+    runInternal();
+  };
+
   const toggleFieldRelation = (fieldId: string) => {
     setFieldRelationOpen((prev) => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
@@ -2298,17 +2539,32 @@ export function SettingView({
     setTagManagerColor(randomTagColor());
   };
 
+  const openDetailTagModal = () => {
+    setDetailTagDraft('');
+    setDetailTagColorDraft(randomTagColor());
+    setIsDetailTagModalOpen(true);
+  };
+
+  const closeDetailTagModal = () => {
+    setIsDetailTagModalOpen(false);
+    setDetailTagDraft('');
+    setDetailTagColorDraft(randomTagColor());
+  };
+
   const createAndAddDetailTag = () => {
-    const normalized = normalizeTagName(detailTagQuery);
+    const normalized = normalizeTagName(detailTagDraft);
     if (!normalized) {
       return;
     }
 
-    upsertTag(normalized, tagManagerColor, 'global');
-    addTagToSelected(normalized, tagManagerColor);
-    setDetailTagQuery('');
-    setDetailTagSearchOpen(false);
-    setTagManagerColor(randomTagColor());
+    upsertTag(normalized, detailTagColorDraft, 'global');
+    addTagToSelected(normalized, detailTagColorDraft);
+    closeDetailTagModal();
+  };
+
+  const addExistingDetailTag = (name: string, color: string) => {
+    addTagToSelected(name, color);
+    closeDetailTagModal();
   };
 
   const resolveAiEndpoint = (modelId: string, customEndpoint?: string) => {
@@ -2329,22 +2585,112 @@ export function SettingView({
     return '';
   };
 
-  const buildAiCardPayload = (card: EditableCard) => ({
-    card: {
-      title: card.title,
-      summary: card.summary,
-      category: card.category ?? null,
-      tags: card.tags.map((tag) => ({ name: tag.name, color: tag.color })),
-      customFields: card.customFields.map((field) => ({ id: field.id ?? '', name: field.name, value: field.value })),
-      summaryIterations: (card.summaryIterations ?? []).length,
-    },
-    context: {
-      categoryOptions: categories,
-      tagOptions,
-      fieldNameHints: customFieldPresets,
-      language: 'zh-CN' as const,
-    },
-  });
+  const buildAiCardPayload = (card: EditableCard) => {
+    const priorityOrder = { strong: 0, sameType: 1, weak: 2 } as const;
+    const relationPriority = (relationType: string, targetType: SettingCard['type']) => {
+      if (['约束', '因果', '冲突', '触发', '揭示'].includes(relationType)) {
+        return 'strong' as const;
+      }
+      if (targetType === card.type) {
+        return 'sameType' as const;
+      }
+      return 'weak' as const;
+    };
+
+    const dependencyMap = new Map<
+      string,
+      {
+        relationTypes: Set<string>;
+        target: EditableCard;
+        priority: 'strong' | 'sameType' | 'weak';
+      }
+    >();
+
+    for (const relation of card.relations) {
+      const target = cards.find((item) => item.id === relation.targetId);
+      if (!target || target.id === card.id) {
+        continue;
+      }
+
+      const nextPriority = relationPriority(relation.type, target.type);
+      const existing = dependencyMap.get(target.id);
+      if (!existing) {
+        dependencyMap.set(target.id, {
+          relationTypes: new Set([relation.type]),
+          target,
+          priority: nextPriority,
+        });
+        continue;
+      }
+
+      existing.relationTypes.add(relation.type);
+      if (priorityOrder[nextPriority] < priorityOrder[existing.priority]) {
+        existing.priority = nextPriority;
+      }
+    }
+
+    const dependencyCaps: Record<'strong' | 'sameType' | 'weak', number> = {
+      strong: 6,
+      sameType: 4,
+      weak: 2,
+    };
+    const usedCount: Record<'strong' | 'sameType' | 'weak', number> = {
+      strong: 0,
+      sameType: 0,
+      weak: 0,
+    };
+
+    const dependencies = Array.from(dependencyMap.values())
+      .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
+      .filter((item) => {
+        const cap = dependencyCaps[item.priority];
+        if (usedCount[item.priority] >= cap) {
+          return false;
+        }
+        usedCount[item.priority] += 1;
+        return true;
+      })
+      .map((item) => ({
+        cardId: item.target.id,
+        title: item.target.title,
+        summary: item.target.summary,
+        cardType: item.target.type,
+        relationTypes: Array.from(item.relationTypes),
+        priority: item.priority,
+        keyFields: item.target.customFields
+          .filter((field) => field.name.trim().length > 0 || field.value.trim().length > 0)
+          .slice(0, 4)
+          .map((field) => ({ name: field.name, value: field.value })),
+      }));
+
+    const trimmedDependenciesCount = dependencyMap.size - dependencies.length;
+    const contextNotice =
+      trimmedDependenciesCount > 0 ? `依赖上下文已裁剪 ${trimmedDependenciesCount} 项（优先保留：强依赖 > 同类型依赖 > 弱依赖）` : null;
+    setAiContextNotice(contextNotice);
+
+    return {
+      card: {
+        id: card.id,
+        type: card.type,
+        title: card.title,
+        summary: card.summary,
+        category: card.category ?? null,
+        tags: card.tags.map((tag) => ({ name: tag.name, color: tag.color })),
+        customFields: card.customFields.map((field) => ({ id: field.id ?? '', name: field.name, value: field.value })),
+        summaryIterations: (card.summaryIterations ?? []).length,
+      },
+      context: {
+        categoryOptions: categories,
+        tagOptions,
+        fieldNameHints: customFieldPresets,
+        dependencies,
+        trimmedDependenciesCount,
+        glossary: ['角色动机一致', '世界观规则一致', '事件因果闭环', '关系约束不冲突'],
+        styleGuide: ['表达具体', '避免空泛套话', '优先增量修改', '保留既有设定语气'],
+        language: 'zh-CN' as const,
+      },
+    };
+  };
 
   const requestAiJson = async (systemPrompt: string, userPrompt: string) => {
     if (!activeAiModelConfig?.apiKey) {
@@ -2585,6 +2931,19 @@ export function SettingView({
   const handleApplyAiSuggestions = () => {
     const selected = aiSuggestions.filter((item) => selectedSuggestionNames.includes(item.name));
     if (selected.length === 0 || !selectedCard) {
+      return;
+    }
+
+    const nameCounter = new Map<string, number>();
+    for (const item of selected) {
+      const normalized = item.name.trim();
+      nameCounter.set(normalized, (nameCounter.get(normalized) ?? 0) + 1);
+    }
+    const conflictNames = Array.from(nameCounter.entries())
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name);
+    if (conflictNames.length > 0) {
+      setAiError(`存在冲突建议（同名属性重复）：${conflictNames.join('、')}。请仅保留一个后再批量应用。`);
       return;
     }
 
@@ -2935,6 +3294,29 @@ export function SettingView({
         JSON.stringify(payload, null, 2),
       ].join('\n\n');
     }
+    if (mode === 'fieldPolish') {
+      if (!externalFieldTarget) {
+        return '';
+      }
+      return [
+        '任务：按润色方案润色单个属性。',
+        '输出 JSON：{"field":{"fieldId?":"","name":"","value":""}}',
+        `润色要求：${aiGuidePolishInstruction}`,
+        JSON.stringify(
+          {
+            cardId: selectedCard.id,
+            field: {
+              fieldId: externalFieldTarget.fieldId,
+              name: externalFieldTarget.name,
+              value: externalFieldTarget.value,
+            },
+            context: payload.context,
+          },
+          null,
+          2
+        ),
+      ].join('\n\n');
+    }
     return [
       '任务：仅通过属性生成摘要。',
       '输出 JSON：{"summary":"..."}',
@@ -2946,12 +3328,24 @@ export function SettingView({
     return buildExternalPromptByMode(externalPromptMode);
   };
 
-  const handleOpenExternalAi = async (mode: AiGuideMode = externalPromptMode) => {
-    if (mode === 'polish') {
-      const input = await requestPolishInstruction('整卡（外部AI提示词）');
+  const handleOpenExternalAi = async (
+    mode: AiGuideMode = externalPromptMode,
+    fieldTarget?: { fieldId?: string; name: string; value: string }
+  ) => {
+    if (mode === 'polish' || mode === 'fieldPolish') {
+      const input = await requestPolishInstruction(mode === 'fieldPolish' ? '属性（外部AI提示词）' : '整卡（外部AI提示词）');
       if (!input) {
         return;
       }
+    }
+    if (mode === 'fieldPolish') {
+      if (!fieldTarget) {
+        setAiError('请先指定需要外部润色的属性。');
+        return;
+      }
+      setExternalFieldTarget(fieldTarget);
+    } else {
+      setExternalFieldTarget(null);
     }
     setExternalPromptMode(mode);
     const prompt = buildExternalPromptByMode(mode);
@@ -2997,14 +3391,34 @@ export function SettingView({
     textarea.focus();
   };
 
+  const normalizeExternalPayload = (value: unknown): { taskType?: string; cardId?: string; result: Record<string, unknown> } => {
+    if (!value || typeof value !== 'object') {
+      throw new Error('外部响应必须是 JSON 对象');
+    }
+    const source = value as ExternalAiPayload;
+    const resultSource = source.result && typeof source.result === 'object' ? (source.result as Record<string, unknown>) : (source as Record<string, unknown>);
+
+    return {
+      taskType: typeof source.taskType === 'string' ? source.taskType : undefined,
+      cardId: typeof source.cardId === 'string' ? source.cardId : undefined,
+      result: resultSource,
+    };
+  };
+
   const handleApplyExternalResponse = () => {
     if (!externalResponseInput.trim()) {
       return;
     }
 
     try {
-      const parsed = JSON.parse(extractJsonObject(externalResponseInput)) as { summary?: unknown; suggestions?: unknown; patch?: unknown; field?: unknown };
+      const parsedRaw = JSON.parse(extractJsonObject(externalResponseInput)) as unknown;
+      const normalized = normalizeExternalPayload(parsedRaw);
+      const parsed = normalized.result as { summary?: unknown; suggestions?: unknown; patch?: unknown; field?: unknown };
       const schemaErrors: string[] = [];
+
+      if (normalized.cardId && selectedCard && normalized.cardId !== selectedCard.id) {
+        throw new Error(`外部响应 cardId 不匹配（当前：${selectedCard.id}，响应：${normalized.cardId}）`);
+      }
 
       if (typeof parsed.summary === 'string' && parsed.summary.trim().length > 0) {
         setAiSummaryDraft(parsed.summary.trim());
@@ -3013,6 +3427,7 @@ export function SettingView({
         setIsAiResultOpen(true);
         setIsExternalAiOpen(false);
         setExternalResponseSchemaErrors([]);
+        setExternalResponseError(null);
         return;
       }
 
@@ -3031,6 +3446,7 @@ export function SettingView({
         setIsAiResultOpen(true);
         setIsExternalAiOpen(false);
         setExternalResponseSchemaErrors([]);
+        setExternalResponseError(null);
         return;
       }
 
@@ -3048,6 +3464,7 @@ export function SettingView({
         setIsAiResultOpen(true);
         setIsExternalAiOpen(false);
         setExternalResponseSchemaErrors([]);
+        setExternalResponseError(null);
         return;
       }
 
@@ -3069,10 +3486,15 @@ export function SettingView({
         setIsAiResultOpen(true);
         setIsExternalAiOpen(false);
         setExternalResponseSchemaErrors([]);
+        setExternalResponseError(null);
         return;
       }
 
-      throw new Error('未识别到 summary、suggestions、patch 或 field 字段');
+      throw new Error(
+        normalized.taskType
+          ? `未识别到与 taskType=${normalized.taskType} 匹配的结果字段（summary/suggestions/patch/field）`
+          : '未识别到 summary、suggestions、patch 或 field 字段'
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'JSON 解析失败';
       setExternalResponseError(message);
@@ -3112,9 +3534,6 @@ export function SettingView({
             </Button>
             <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setIsTemplateManagerOpen(true)}>
               模版管理器
-            </Button>
-            <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setIsDefaultDependencyOpen(true)}>
-              默认依赖设置
             </Button>
             <div ref={toolbarSearchRef}>
               <Button size="sm" variant="secondary" className={styles.toolboxActionButton} onClick={() => setToolbarTagSearchOpen((prev) => !prev)}>
@@ -3395,7 +3814,7 @@ export function SettingView({
                 <button
                   key={item.key}
                   className={styles.quickTypeButton}
-                  onClick={() => handleAddCard(undefined, newCardNameDraft, item.type, item.category, item.titlePrefix, item.useDefaultDependency ?? true)}
+                  onClick={() => handleAddCard(undefined, newCardNameDraft, item.type, item.category, item.titlePrefix)}
                 >
                   {item.label}
                 </button>
@@ -3732,27 +4151,77 @@ export function SettingView({
                   <span className={`${styles.aiModelStatus} ${isAiModelConfigured ? styles.aiModelReady : styles.aiModelMissing}`}>
                     {aiModelStatusText}
                   </span>
+                    <div className={styles.aiChannelSwitchInline}>
+                      <span className={styles.aiChannelSwitchLabel}>默认渠道</span>
+                      <div className={styles.aiChannelSwitchGroup}>
+                        <button
+                          type="button"
+                          className={preferredAiChannel === 'internal' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                          onClick={() => setPreferredAiChannel('internal')}
+                        >
+                          内置 AI
+                        </button>
+                        <button
+                          type="button"
+                          className={preferredAiChannel === 'external' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                          onClick={() => setPreferredAiChannel('external')}
+                        >
+                          外部 AI
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className={styles.aiActionRow}>
-                    <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => void handleOpenAiGuide()}>
-                      分步设定引导
-                    </Button>
-                    <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => runAiGuideFlow('summaryToFields')} disabled={aiBusy}>
-                      摘要生成属性
-                    </Button>
-                    <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => runAiGuideFlow('reviewCard')} disabled={aiBusy}>
-                      审校并建议更新
-                    </Button>
-                    <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => runAiGuideFlow('fieldsToSummary')} disabled={aiBusy}>
-                      属性生成摘要
-                    </Button>
-                    <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => runAiGuideFlow('polish')} disabled={aiBusy}>
-                      整卡润色
-                    </Button>
-                    <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => void handleOpenExternalAi('reviewCard')}>
-                      外部AI辅助
-                    </Button>
+                    <div className={styles.aiActionGroup}>
+                      <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => void handleOpenAiGuide()}>
+                        辅助建卡
+                      </Button>
+                    </div>
+                    <div className={styles.aiActionGroup}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className={styles.inlineActionButton}
+                        onClick={() => runAiActionByPreferredChannel('summaryToFields', () => void runAiGuideFlow('summaryToFields'))}
+                        disabled={aiBusy}
+                      >
+                        摘要生成设定
+                      </Button>
+                    </div>
+                    <div className={styles.aiActionGroup}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className={styles.inlineActionButton}
+                        onClick={() => runAiActionByPreferredChannel('reviewCard', () => void runAiGuideFlow('reviewCard'))}
+                        disabled={aiBusy}
+                      >
+                        审校并建议更新
+                      </Button>
+                    </div>
+                    <div className={styles.aiActionGroup}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className={styles.inlineActionButton}
+                        onClick={() => runAiActionByPreferredChannel('fieldsToSummary', () => void runAiGuideFlow('fieldsToSummary'))}
+                        disabled={aiBusy}
+                      >
+                        设定生成摘要
+                      </Button>
+                    </div>
+                    <div className={styles.aiActionGroup}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className={styles.inlineActionButton}
+                        onClick={() => runAiActionByPreferredChannel('polish', () => void runAiGuideFlow('polish'))}
+                        disabled={aiBusy}
+                      >
+                        整卡润色
+                      </Button>
+                    </div>
                     <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={handleUndoLastAiApply} disabled={!hasUndoForSelectedCard}>
                       撤销上次AI应用
                     </Button>
@@ -3762,6 +4231,13 @@ export function SettingView({
                   </div>
                 </div>
                 {aiError && <p className={styles.aiErrorText}>{aiError}</p>}
+                {aiContextNotice && <p className={styles.aiHint}>{aiContextNotice}</p>}
+
+                <div className={styles.cardIterationEntryRow}>
+                  <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setIsCardIterationHistoryOpen(true)}>
+                    当前迭代：{currentCardIterationTag} · 查看整卡迭代（{(selectedCard.cardIterations ?? []).length}）
+                  </Button>
+                </div>
 
                 <div className={styles.fixedMetaTopRow}>
                   <div className={styles.fixedMetaField}>
@@ -3775,6 +4251,24 @@ export function SettingView({
                       }}
                       placeholder="输入设定名称"
                     />
+                    <div className={styles.nameTagRow}>
+                      <button type="button" className={styles.addTagIconButton} onClick={openDetailTagModal} aria-label="添加标签">
+                        +
+                      </button>
+                      <div className={styles.cardTags}>
+                        {selectedCard.tags.length > 0 ? (
+                          selectedCard.tags.map((tag) => (
+                            <button key={tag.name} className={styles.tagChip} onClick={() => handleRemoveTagFromSelected(tag.name)}>
+                              <span className={styles.tagDot} style={{ background: tag.color }} />
+                              {tag.name}
+                              <span className={styles.tagRemove}>×</span>
+                            </button>
+                          ))
+                        ) : (
+                          <p className={styles.emptyState}>无标签</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className={styles.fixedMetaField}>
@@ -3796,7 +4290,7 @@ export function SettingView({
                   </div>
                 </div>
 
-                <div className={styles.fixedMetaField}>
+                <div className={`${styles.fixedMetaField} ${styles.summarySection}`}>
                   <div className={styles.fixedTagHeader}>
                     <span className={styles.fixedMetaLabel}>摘要</span>
                     {getCurrentSummaryIterationTag(selectedCard) ? (
@@ -3811,9 +4305,6 @@ export function SettingView({
                       </Button>
                       <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={runAiPolishSummaryInline} disabled={aiBusy}>
                         润色摘要
-                      </Button>
-                      <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => void handleOpenExternalAi('polish')}>
-                        外部润色提示词
                       </Button>
                     </div>
                   </div>
@@ -3954,166 +4445,64 @@ export function SettingView({
                   )}
                 </div>
 
-                <div className={styles.fixedMetaField}>
-                  <div className={styles.fixedTagHeader}>
-                    <span className={styles.fixedMetaLabel}>标签</span>
-                    <div className={styles.tagPalette} ref={detailSearchRef}>
-                      <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => setDetailTagSearchOpen((prev) => !prev)}>
-                        {detailTagSearchOpen ? '收起标签输入' : '添加标签'}
-                      </Button>
-
-                      {detailTagSearchOpen && (
-                        <div className={styles.tagSearchWrap}>
-                          <input
-                            className={styles.detailInput}
-                            value={detailTagQuery}
-                            placeholder="搜索标签或输入后创建"
-                            autoFocus
-                            onChange={(event) => {
-                              setDetailTagQuery(event.target.value);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                createAndAddDetailTag();
-                              }
-
-                              if (event.key === 'Escape') {
-                                setDetailTagSearchOpen(false);
-                                setDetailTagQuery('');
-                              }
-                            }}
-                          />
-                          <div className={styles.tagSearchDropdown}>
-                            <button className={styles.tagCreateItem} onClick={createAndAddDetailTag} disabled={!normalizeTagName(detailTagQuery)}>
-                              添加标签 “{normalizeTagName(detailTagQuery) || '请输入标签'}”
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className={styles.cardTags}>
-                    {selectedCard.tags.length > 0 ? (
-                      selectedCard.tags.map((tag) => (
-                        <button key={tag.name} className={styles.tagChip} onClick={() => handleRemoveTagFromSelected(tag.name)}>
-                          <span className={styles.tagDot} style={{ background: tag.color }} />
-                          {tag.name}
-                          <span className={styles.tagRemove}>×</span>
-                        </button>
-                      ))
-                    ) : (
-                      <p className={styles.emptyState}>无标签</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className={styles.fixedMetaField}>
+                <div className={`${styles.fixedMetaField} ${styles.dependencySection}`}>
                   <span className={styles.fixedMetaLabel}>卡片依赖关系</span>
-                  <div className={styles.cardLevelRelationList}>
+                  <div className={styles.dependencyTagRow}>
+                    <button type="button" className={styles.addDependencyIconButton} onClick={() => setIsDependencyEditorOpen(true)} aria-label="添加依赖">
+                      +
+                    </button>
                     {getCardLevelRelations(selectedCard).length > 0 ? (
                       getCardLevelRelations(selectedCard).map((relation) => {
                         const { targetCard, targetField } = resolveRelationTarget(relation);
                         return (
-                          <div key={`card-level-${relation.index}`} className={styles.fieldRelationItem}>
+                          <button
+                            type="button"
+                            key={`card-level-${relation.index}`}
+                            className={styles.dependencyTag}
+                            onClick={() => {
+                              if (targetCard) {
+                                openCardPreview(targetCard.id);
+                              }
+                            }}
+                          >
                             <span className={styles.relationType}>{relation.type}</span>
-                            <button
-                              className={styles.relationTargetLink}
-                              onClick={() => {
-                                if (targetCard) {
-                                  openCardPreview(targetCard.id);
-                                }
-                              }}
-                            >
-                              {targetCard?.title ?? '未知卡片'}
-                              {targetField ? ` / ${targetField.name}` : ''}
-                            </button>
-                            <button className={styles.removeRelationBtn} onClick={() => handleDeleteRelation(relation.index)} title="删除依赖">
-                              ×
-                            </button>
-                          </div>
+                            <span>{targetCard?.title ?? '未知卡片'}</span>
+                            {targetField ? <span> / {targetField.name}</span> : null}
+                          </button>
                         );
                       })
                     ) : (
-                      <p className={styles.emptyState}>暂无卡片级依赖</p>
+                      <p className={styles.emptyState}>无依赖</p>
                     )}
-                  </div>
-                  <div className={styles.fieldRelationAdd}>
-                    <select
-                      className={styles.relationSelect}
-                      value={cardDependencyTarget}
-                      onChange={(event) => setCardDependencyTarget(event.target.value)}
-                    >
-                      <option value="">选择依赖卡</option>
-                      {cards
-                        .filter((card) => card.id !== selectedCard.id)
-                        .map((card) => (
-                          <option key={card.id} value={card.id}>
-                            {card.title}
-                          </option>
-                        ))}
-                    </select>
-                    <select
-                      className={styles.relationSelect}
-                      value={cardDependencyType}
-                      onChange={(event) => setCardDependencyType(event.target.value)}
-                    >
-                      {RELATION_TYPE_OPTIONS.map((relationType) => (
-                        <option key={relationType} value={relationType}>
-                          {relationType}
-                        </option>
-                      ))}
-                    </select>
-                    <button className={styles.addRelationBtn} onClick={handleCreateCardLevelRelation} disabled={!cardDependencyTarget}>
-                      +
-                    </button>
                   </div>
                 </div>
 
-                <div className={styles.fixedMetaField}>
-                  <span className={styles.fixedMetaLabel}>将当前卡片设为默认依赖卡</span>
-                  <p className={styles.aiHint}>勾选后，创建对应类型的新卡片会自动关联当前卡片（例如：世界观卡 → 新角色卡 / 新物品卡）。</p>
-                  <div className={styles.categoryFilters}>
-                    {CARD_TYPE_OPTIONS.map((option) => {
-                      const checked = isCardDefaultDependencyForType(selectedCard.id, option.type);
-                      return (
-                        <label key={`default-source-${selectedCard.id}-${option.type}`} className={styles.categoryFilter}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleCardDefaultDependencyForType(selectedCard.id, option.type)}
-                          />
-                          {option.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
 
               <div className={styles.detailSection}>
-                <h4>自定义属性</h4>
-                <p>属性按顺序展示，可在整页内拖动重排。</p>
+                <h4>自定义设定</h4>
+                <p>设定按顺序展示，可在整页内拖动重排。</p>
                 <div className={styles.customFieldCreateRow}>
-                  <input
-                    className={styles.detailInput}
-                    value={newCustomFieldName}
-                    onChange={(event) => setNewCustomFieldName(event.target.value)}
-                    placeholder="例如：服设、口癖、习惯动作"
-                  />
-                  <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => handleAddCustomField(newCustomFieldName)}>
-                    添加属性
+                  <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={handleAddCustomField}>
+                    添加设定
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={styles.inlineActionButton}
+                    onClick={() => setIsCustomFieldEditorOpen((prev) => !prev)}
+                  >
+                    {isCustomFieldEditorOpen ? '收起设定' : '展开设定'}
                   </Button>
                 </div>
 
               </div>
             </div>
 
-            <div className={styles.fieldBoardHint}>提示：属性按顺序排列，可拖动卡片调整顺序。</div>
+            <div className={styles.fieldBoardHint}>提示：设定按顺序排列，可拖动卡片调整顺序。</div>
             <div className={styles.editorFieldList}>
-              {selectedCard.customFields.length > 0 ? (
-                selectedCard.customFields.map((field, index) => {
+              {isCustomFieldEditorOpen && customFieldDrafts.length > 0 ? (
+                customFieldDrafts.map((field, index) => {
                   const fieldId = field.id ?? `field-editor-${index}`;
                   const fieldRelations = getFieldRelations(fieldId);
                   const isRelationOpen = fieldRelationOpen[fieldId] ?? false;
@@ -4122,8 +4511,8 @@ export function SettingView({
                   return (
                     <div
                       key={fieldId}
-                      className={`${styles.customFieldCard} ${draggingFieldId === fieldId ? styles.draggingField : ''} ${dragOverField?.id === fieldId ? (dragOverField.placement === 'before' ? styles.dropIndicatorBefore : styles.dropIndicatorAfter) : ''}`}
-                      draggable
+                      className={`${styles.customFieldCard} ${field.id === pendingCustomFieldId ? styles.pendingFieldCard : ''} ${draggingFieldId === fieldId ? styles.draggingField : ''} ${dragOverField?.id === fieldId ? (dragOverField.placement === 'before' ? styles.dropIndicatorBefore : styles.dropIndicatorAfter) : ''}`}
+                      draggable={field.id !== pendingCustomFieldId}
                       onDragStart={(event) => onFieldDragStart(event, fieldId)}
                       onDragEnter={(event) => onFieldDragOver(event, fieldId)}
                       onDragOver={(event) => onFieldDragOver(event, fieldId)}
@@ -4139,7 +4528,13 @@ export function SettingView({
                           className={styles.fieldNameInput}
                           value={field.name}
                           onChange={(event) => handleUpdateCustomField(index, { name: event.target.value })}
-                          placeholder="属性名"
+                          onBlur={(event) => {
+                            const value = event.target.value.trim();
+                            if (!value) {
+                              handleUpdateCustomField(index, { name: `设定 ${index + 1}` });
+                            }
+                          }}
+                          placeholder="设定名"
                         />
                         {getCurrentFieldIterationTag(field) ? (
                           <span className={styles.iterationVersionTag}>{getCurrentFieldIterationTag(field)}</span>
@@ -4147,16 +4542,42 @@ export function SettingView({
                         {getCurrentFieldIterationMeta(field) ? (
                           <span className={styles.currentIterationBadge}>当前来源：{getCurrentFieldIterationMeta(field)}</span>
                         ) : null}
+                        {field.id === pendingCustomFieldId ? <span className={styles.pendingFieldBadge}>新建中</span> : null}
                         <div className={styles.fieldInlineActions}>
-                          <button className={styles.deleteFieldBtn} onClick={() => openFieldIterationDraft(field)}>
-                            迭代
-                          </button>
-                          <button className={styles.deleteFieldBtn} onClick={() => runAiPolishFieldInline(field)}>
-                            润色
-                          </button>
-                          <button className={styles.deleteFieldBtn} onClick={() => handleDeleteCustomField(index)}>
-                            删除
-                          </button>
+                          {field.id === pendingCustomFieldId ? (
+                            <>
+                              <button className={styles.deleteFieldBtn} onClick={handleConfirmPendingCustomField}>
+                                添加
+                              </button>
+                              <button className={styles.deleteFieldBtn} onClick={handleCancelPendingCustomField}>
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button className={styles.deleteFieldBtn} onClick={() => openFieldIterationDraft(field)}>
+                                迭代
+                              </button>
+                              <button className={styles.deleteFieldBtn} onClick={() => runAiPolishFieldInline(field)}>
+                                润色
+                              </button>
+                              <button
+                                className={styles.deleteFieldBtn}
+                                onClick={() =>
+                                  void handleOpenExternalAi('fieldPolish', {
+                                    fieldId: field.id,
+                                    name: field.name,
+                                    value: field.value,
+                                  })
+                                }
+                              >
+                                外部润色
+                              </button>
+                              <button className={styles.deleteFieldBtn} onClick={() => handleDeleteCustomField(index)}>
+                                删除
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                       <textarea
@@ -4356,7 +4777,7 @@ export function SettingView({
                               取消
                             </Button>
                             <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => saveFieldIteration(index)}>
-                              保存属性迭代
+                              保存设定迭代
                             </Button>
                           </div>
                         </div>
@@ -4450,8 +4871,10 @@ export function SettingView({
                     </div>
                   );
                 })
+              ) : isCustomFieldEditorOpen ? (
+                <p className={styles.emptyState}>还没有自定义设定</p>
               ) : (
-                <p className={styles.emptyState}>还没有自定义属性</p>
+                <p className={styles.emptyState}>设定编辑已关闭，点击“展开设定”查看与修改。</p>
               )}
             </div>
 
@@ -4617,10 +5040,29 @@ export function SettingView({
         <div className={styles.managerOverlay} role="presentation" onClick={() => setIsAiGuideOpen(false)}>
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className={styles.managerHeader}>
-              <h3>内置AI引导</h3>
+              <h3>辅助建卡</h3>
             </div>
             <div className={styles.aiResultBody}>
               <p className={styles.aiHint}>轻量分步引导：先写已有想法，再逐步补齐。可以留空，不必一次写完整。</p>
+              <div className={styles.aiChannelSwitchRow}>
+                <span className={styles.aiChannelSwitchLabel}>默认渠道</span>
+                <div className={styles.aiChannelSwitchGroup}>
+                  <button
+                    type="button"
+                    className={preferredAiChannel === 'internal' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                    onClick={() => setPreferredAiChannel('internal')}
+                  >
+                    内置 AI
+                  </button>
+                  <button
+                    type="button"
+                    className={preferredAiChannel === 'external' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                    onClick={() => setPreferredAiChannel('external')}
+                  >
+                    外部 AI
+                  </button>
+                </div>
+              </div>
               <div className={styles.aiGuideHeaderRow}>
                 <p className={styles.aiGuideStepTitle}>问题 {aiGuideQuestionIndex + 1}/{aiGuideQuestions.length}：{aiGuideQuestions[aiGuideQuestionIndex] ?? '请先生成引导问题'}</p>
                 <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => void generateAiGuideQuestions()} disabled={aiGuideQuestionBusy}>
@@ -4660,13 +5102,87 @@ export function SettingView({
 
             <div className={styles.managerActionsRow}>
               <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => void handleOpenExternalAi('describe')}>
-                使用外部AI辅助
+                打开外部辅助
               </Button>
               <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setIsAiGuideOpen(false)}>
                 关闭
               </Button>
-              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => runAiGuideFlow('describe')} disabled={aiBusy}>
-                {aiBusy ? '执行中...' : '执行引导'}
+              <Button
+                size="sm"
+                variant="secondary"
+                className={styles.inlineActionButton}
+                onClick={() => runAiActionByPreferredChannel('describe', () => void runAiGuideFlow('describe'))}
+                disabled={aiBusy}
+              >
+                {aiBusy ? '执行中...' : preferredAiChannel === 'external' ? '使用外部辅助建卡' : '使用内置辅助建卡'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cardIterationDraft.open && selectedCard && (
+        <div className={styles.managerOverlay} role="presentation" onClick={closeCardIterationDraft}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>创建整卡迭代</h3>
+            </div>
+            <p className={styles.aiHint}>将当前卡片快照保存为新版本，方便后续对比与回滚。</p>
+            <div className={styles.iterationDraftSection}>
+              <label className={styles.iterationDraftLabel}>版本标签（可选）</label>
+              <input
+                className={styles.detailInput}
+                value={cardIterationDraft.versionTag}
+                onChange={(event) => setCardIterationDraft((prev) => ({ ...prev, versionTag: event.target.value }))}
+                placeholder="例如：v2-剧情强化"
+              />
+              <label className={styles.iterationDraftLabel}>迭代原因</label>
+              <select
+                className={styles.categorySelect}
+                value={cardIterationDraft.reasonType}
+                onChange={(event) =>
+                  setCardIterationDraft((prev) => ({
+                    ...prev,
+                    reasonType: event.target.value as IterationReasonType,
+                    reasonCardId: event.target.value === 'card' ? prev.reasonCardId : '',
+                    reasonText: event.target.value === 'manual' ? prev.reasonText : '',
+                  }))
+                }
+              >
+                <option value="manual">手动填写</option>
+                <option value="card">关联卡片</option>
+              </select>
+              {cardIterationDraft.reasonType === 'manual' ? (
+                <textarea
+                  className={styles.detailTextarea}
+                  rows={3}
+                  value={cardIterationDraft.reasonText}
+                  onChange={(event) => setCardIterationDraft((prev) => ({ ...prev, reasonText: event.target.value }))}
+                  placeholder="记录本次整卡迭代的目标或触发点"
+                />
+              ) : (
+                <select
+                  className={styles.categorySelect}
+                  value={cardIterationDraft.reasonCardId}
+                  onChange={(event) => setCardIterationDraft((prev) => ({ ...prev, reasonCardId: event.target.value }))}
+                >
+                  <option value="">请选择关联卡片</option>
+                  {cards
+                    .filter((card) => card.id !== selectedCard.id)
+                    .map((card) => (
+                      <option key={`card-iteration-reason-${card.id}`} value={card.id}>
+                        {card.title}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={closeCardIterationDraft}>
+                取消
+              </Button>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={saveCardIteration}>
+                保存整卡迭代
               </Button>
             </div>
           </div>
@@ -4806,6 +5322,18 @@ export function SettingView({
               </Button>
               <Button
                 size="sm"
+                variant={externalPromptMode === 'fieldPolish' ? 'secondary' : 'ghost'}
+                className={styles.inlineActionButton}
+                disabled={!externalFieldTarget}
+                onClick={() => {
+                  setExternalPromptMode('fieldPolish');
+                  setExternalPrompt(buildExternalPromptByMode('fieldPolish'));
+                }}
+              >
+                属性润色
+              </Button>
+              <Button
+                size="sm"
                 variant={externalPromptMode === 'fieldsToSummary' ? 'secondary' : 'ghost'}
                 className={styles.inlineActionButton}
                 onClick={() => {
@@ -4840,6 +5368,10 @@ export function SettingView({
                 打开模型网页
               </Button>
             </div>
+            {externalPromptMode === 'fieldPolish' && externalFieldTarget ? (
+              <p className={styles.aiHint}>当前属性目标：{externalFieldTarget.name}</p>
+            ) : null}
+            {aiContextNotice ? <p className={styles.aiHint}>{aiContextNotice}</p> : null}
 
             <textarea className={styles.detailTextarea} rows={8} value={externalPrompt} onChange={(event) => setExternalPrompt(event.target.value)} />
             <textarea
@@ -4912,60 +5444,215 @@ export function SettingView({
         </div>
       )}
 
-      {isDefaultDependencyOpen && (
-        <div className={styles.managerOverlay} role="presentation" onClick={() => setIsDefaultDependencyOpen(false)}>
+      {isDependencyEditorOpen && selectedCard && (
+        <div className={styles.managerOverlay} role="presentation" onClick={() => setIsDependencyEditorOpen(false)}>
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className={styles.managerHeader}>
-              <h3>默认依赖设置</h3>
+              <h3>编辑依赖</h3>
             </div>
-            <p className={styles.aiHint}>这里可按“新卡类型”批量设置默认依赖卡。你也可以在单卡编辑页把某张卡直接设为默认依赖来源。</p>
-            <div className={styles.categoryFilters}>
-              {CARD_TYPE_OPTIONS.map((option) => (
-                <button
-                  key={`dep-type-${option.type}`}
-                  className={`${styles.categoryFilter} ${defaultDependencyType === option.type ? styles.activeCategory : ''}`}
-                  onClick={() => setDefaultDependencyType(option.type)}
-                >
-                  {option.label}（{(defaultDependencyMap[option.type] ?? []).length}）
-                </button>
-              ))}
-            </div>
-            <div className={styles.managerActionsRow}>
-              <Button
-                size="sm"
-                variant="ghost"
-                className={styles.inlineActionButton}
-                onClick={() =>
-                  setDefaultDependencyMap((prev) => ({
-                    ...prev,
-                    [defaultDependencyType]: [],
-                  }))
-                }
-              >
-                清空当前类型默认依赖
-              </Button>
-            </div>
-            <div className={styles.managerList}>
-              {defaultDependencyCandidates.length > 0 ? (
-                defaultDependencyCandidates.map((candidate) => {
-                  const checked = (defaultDependencyMap[defaultDependencyType] ?? []).includes(candidate.id);
+            <div className={styles.cardLevelRelationList}>
+              {getCardLevelRelations(selectedCard).length > 0 ? (
+                getCardLevelRelations(selectedCard).map((relation) => {
+                  const { targetCard, targetField } = resolveRelationTarget(relation);
                   return (
-                    <label key={`dep-candidate-${candidate.id}`} className={styles.managerListItem}>
-                      <span className={styles.managerTagName}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleDefaultDependency(defaultDependencyType, candidate.id)}
-                        />
-                        {candidate.title}
-                      </span>
-                      <span className={styles.templatePickMeta}>{candidate.typeLabel}</span>
-                    </label>
+                    <div key={`card-level-editor-${relation.index}`} className={styles.fieldRelationItem}>
+                      <span className={styles.relationType}>{relation.type}</span>
+                      <button
+                        className={styles.relationTargetLink}
+                        onClick={() => {
+                          if (targetCard) {
+                            openCardPreview(targetCard.id);
+                            setIsDependencyEditorOpen(false);
+                          }
+                        }}
+                      >
+                        {targetCard?.title ?? '未知卡片'}
+                        {targetField ? ` / ${targetField.name}` : ''}
+                      </button>
+                      <button type="button" className={styles.removeRelationBtn} onClick={() => handleDeleteRelation(relation.index)} title="删除依赖">
+                        ×
+                      </button>
+                    </div>
                   );
                 })
               ) : (
-                <p className={styles.emptyState}>当前还没有可设置的依赖卡。</p>
+                <p className={styles.emptyState}>暂无依赖</p>
               )}
+            </div>
+            <div className={styles.fieldRelationAdd}>
+              <select
+                className={styles.relationSelect}
+                value={cardDependencyTarget}
+                onChange={(event) => setCardDependencyTarget(event.target.value)}
+              >
+                <option value="">选择依赖卡</option>
+                {cards
+                  .filter((card) => card.id !== selectedCard.id)
+                  .map((card) => (
+                    <option key={card.id} value={card.id}>
+                      {card.title}
+                    </option>
+                  ))}
+              </select>
+              <select
+                className={styles.relationSelect}
+                value={cardDependencyType}
+                onChange={(event) => setCardDependencyType(event.target.value)}
+              >
+                {RELATION_TYPE_OPTIONS.map((relationType) => (
+                  <option key={relationType} value={relationType}>
+                    {relationType}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className={styles.addRelationBtn} onClick={handleCreateCardLevelRelation} disabled={!cardDependencyTarget}>
+                +
+              </button>
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setIsDependencyEditorOpen(false)}>
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDetailTagModalOpen && selectedCard && (
+        <div className={styles.managerOverlay} role="presentation" onClick={closeDetailTagModal}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>添加标签</h3>
+            </div>
+            <div className={styles.managerRow}>
+              <input
+                className={styles.tagInput}
+                value={detailTagDraft}
+                onChange={(event) => setDetailTagDraft(event.target.value)}
+                placeholder="输入标签名"
+                autoFocus
+              />
+              <input
+                className={styles.colorInput}
+                type="color"
+                value={detailTagColorDraft}
+                onChange={(event) => setDetailTagColorDraft(event.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                className={styles.inlineActionButton}
+                onClick={createAndAddDetailTag}
+                disabled={!normalizeTagName(detailTagDraft)}
+              >
+                {detailTagCanCreate ? '创建并添加' : '添加'}
+              </Button>
+            </div>
+            <div className={styles.managerList}>
+              {detailTagCandidates.length > 0 ? (
+                detailTagCandidates.map((tag) => (
+                  <button key={`detail-tag-candidate-${tag.name}`} className={styles.tagPaletteItem} onClick={() => addExistingDetailTag(tag.name, tag.color)}>
+                    <span className={styles.tagDot} style={{ background: tag.color }} />
+                    <span>{tag.name}</span>
+                    <span className={styles.templatePickMeta}>{tagSourceLabel(tag.name)}</span>
+                  </button>
+                ))
+              ) : (
+                <p className={styles.emptyState}>没有可选标签，可直接创建新标签。</p>
+              )}
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={closeDetailTagModal}>
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCardIterationHistoryOpen && selectedCard && (
+        <div className={styles.managerOverlay} role="presentation" onClick={() => setIsCardIterationHistoryOpen(false)}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>整卡迭代历史</h3>
+            </div>
+            <p className={styles.aiHint}>查看当前迭代与历史快照，可重命名并切换当前版本。</p>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={openCardIterationDraft}>
+                创建整卡迭代
+              </Button>
+            </div>
+            <div className={styles.iterationList}>
+              {(selectedCard.cardIterations ?? []).length > 0 ? (
+                (selectedCard.cardIterations ?? []).map((iteration) => {
+                  const reasonLabel = resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId);
+                  return (
+                    <div key={iteration.id} className={`${styles.iterationItem} ${styles.cardIterationItem}`}>
+                      <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
+                      {editingCardIterationId === iteration.id ? (
+                        <div className={styles.cardIterationRenameRow}>
+                          <input
+                            className={styles.detailInput}
+                            value={editingCardIterationVersionTag}
+                            onChange={(event) => setEditingCardIterationVersionTag(event.target.value)}
+                            placeholder="输入迭代名称"
+                          />
+                          <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={saveCardIterationRename}>
+                            保存
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className={styles.inlineActionButton}
+                            onClick={() => {
+                              setEditingCardIterationId(null);
+                              setEditingCardIterationVersionTag('');
+                            }}
+                          >
+                            取消
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{resolveCardIterationTag(iteration)}</span>
+                      )}
+                      <div className={styles.cardIterationPreviewGrid}>
+                        <p><strong>名称：</strong>{iteration.snapshot.title || '（空）'}</p>
+                        <p><strong>分类：</strong>{iteration.snapshot.category || '（空）'}</p>
+                        <p><strong>摘要：</strong>{iteration.snapshot.summary || '（空）'}</p>
+                        {iteration.snapshot.customFields.length > 0 ? (
+                          iteration.snapshot.customFields.map((field) => (
+                            <p key={`iter-preview-${iteration.id}-${field.id ?? field.name}`}><strong>{field.name || '未命名设定'}：</strong>{field.value || '（空）'}</p>
+                          ))
+                        ) : (
+                          <p><strong>设定：</strong>无设定</p>
+                        )}
+                      </div>
+                      <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={reasonLabel}>{reasonLabel}</span>
+                      <div className={styles.managerActionsRow}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className={styles.inlineActionButton}
+                          onClick={() => setCardIterationAsCurrent(iteration.id)}
+                          disabled={selectedCard.activeCardIterationId === iteration.id}
+                        >
+                          {selectedCard.activeCardIterationId === iteration.id ? '当前版本' : '设为当前'}
+                        </Button>
+                        <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => startRenameCardIteration(iteration)}>
+                          重命名
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className={styles.emptyState}>暂无整卡迭代，当前默认为“原始”。</p>
+              )}
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setIsCardIterationHistoryOpen(false)}>
+                关闭
+              </Button>
             </div>
           </div>
         </div>

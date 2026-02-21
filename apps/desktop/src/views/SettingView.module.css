@@ -30,6 +30,14 @@
   max-width: 100%;
   white-space: nowrap;
   flex-shrink: 0;
+  border-radius: 999px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 8px 18px rgba(15, 23, 42, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.inlineActionButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset, 0 12px 24px rgba(15, 23, 42, 0.18);
 }
 
 .toolbox {
@@ -586,6 +594,7 @@
   font-size: var(--text-sm);
   background: var(--bg-elevated);
   color: var(--slate-700);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 6px 14px rgba(15, 23, 42, 0.08);
 }
 
 .detailQuickCreateRow {
@@ -610,6 +619,7 @@
   font-size: var(--text-sm);
   background: var(--bg-elevated);
   color: var(--slate-700);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.62) inset, 0 8px 18px rgba(15, 23, 42, 0.1);
 }
 
 .detailTextarea {
@@ -619,8 +629,9 @@
 
 .detailInput:focus-visible,
 .detailTextarea:focus-visible {
-  outline: 2px solid var(--border-focus);
+  outline: 2px solid color-mix(in srgb, var(--border-focus) 82%, var(--teal-300));
   outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.12), 0 12px 24px rgba(15, 23, 42, 0.16);
 }
 
 .uploadButton {
@@ -661,6 +672,38 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.nameTagRow {
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.addTagIconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 62%, white), color-mix(in srgb, var(--slate-100) 80%, white));
+  color: var(--slate-700);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.addTagIconButton:hover {
+  border-color: var(--coral-300);
+  color: var(--coral-700);
+  transform: translateY(-1px);
 }
 
 .tagChip {
@@ -866,10 +909,13 @@
   width: min(1180px, 100%);
   max-height: calc(100vh - 40px);
   overflow: auto;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-light);
+  background:
+    radial-gradient(circle at 8% 6%, color-mix(in srgb, var(--teal-100) 36%, transparent), transparent 35%),
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--coral-100) 40%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 74%, white) 0%, color-mix(in srgb, var(--slate-100) 52%, white) 100%);
+  border: 1px solid color-mix(in srgb, var(--border-light) 76%, var(--slate-200));
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 24px 62px rgba(15, 23, 42, 0.28), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   padding: var(--space-6);
 }
 
@@ -878,6 +924,8 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-light) 72%, var(--teal-200));
 }
 
 .editorEyebrow {
@@ -892,8 +940,10 @@
 .editorTitle {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: clamp(30px, 2.4vw, 36px);
+  letter-spacing: 0.01em;
   color: var(--slate-800);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.52), 0 8px 24px rgba(15, 23, 42, 0.2);
 }
 
 .editorGrid {
@@ -903,33 +953,35 @@
 }
 
 .fixedMetaCard {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--slate-50);
-  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--border-light) 68%, var(--slate-200));
+  border-radius: calc(var(--radius-lg) + 2px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 72%, white), color-mix(in srgb, var(--slate-100) 40%, white));
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.76) inset, 0 16px 32px rgba(15, 23, 42, 0.14);
 }
 
 .fixedMetaTopRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
   gap: var(--space-2);
-  align-items: end;
+  align-items: start;
+  order: 1;
 }
 
 .fixedMetaField {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 6px;
   min-width: 0;
 }
 
 .fixedMetaLabel {
   font-size: 11px;
   font-weight: 600;
-  color: var(--slate-500);
+  color: color-mix(in srgb, var(--slate-500) 85%, var(--teal-600));
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -966,14 +1018,67 @@
   flex-wrap: wrap;
 }
 
-.aiWorkbench {
+.aiChannelSwitchInline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.aiActionGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aiChannelSwitchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.aiChannelSwitchLabel {
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
+.aiChannelSwitchGroup {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--teal-50) 45%, white);
-  padding: var(--space-3);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.aiChannelSwitchButton,
+.aiChannelSwitchActive {
+  border: none;
+  background: transparent;
+  color: var(--slate-500);
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.aiChannelSwitchActive {
+  background: var(--coral-500);
+  color: #fff;
+}
+
+.aiWorkbench {
+  border: 1px solid color-mix(in srgb, var(--teal-300) 45%, var(--border-light));
+  border-radius: calc(var(--radius-lg) + 2px);
+  background:
+    radial-gradient(circle at 84% -8%, color-mix(in srgb, var(--teal-200) 30%, transparent), transparent 38%),
+    linear-gradient(165deg, color-mix(in srgb, var(--teal-50) 68%, white), color-mix(in srgb, var(--teal-100) 46%, var(--slate-50)));
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  order: 3;
+  box-shadow: 0 16px 28px rgba(8, 47, 73, 0.22), 0 1px 0 rgba(255, 255, 255, 0.34) inset;
 }
 
 .aiWorkbenchHeader h4 {
@@ -1358,6 +1463,28 @@
   gap: var(--space-2);
 }
 
+.pendingFieldCard {
+  border-color: color-mix(in srgb, var(--amber-400) 56%, var(--coral-300));
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--amber-100) 42%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--amber-50) 52%, white), color-mix(in srgb, var(--slate-50) 84%, white));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber-300) 35%, transparent), 0 16px 28px rgba(180, 83, 9, 0.2);
+}
+
+.pendingFieldBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--amber-700) 88%, var(--coral-700));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--amber-100) 90%, white), color-mix(in srgb, var(--amber-200) 76%, white));
+  border: 1px solid color-mix(in srgb, var(--amber-300) 75%, var(--coral-300));
+}
+
 .customFieldHeader {
   display: flex;
   align-items: center;
@@ -1597,6 +1724,137 @@
   white-space: nowrap;
 }
 
+.cardIterationBoard {
+  margin-top: var(--space-2);
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--coral-300) 45%, var(--border-light));
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--coral-100) 60%, transparent), transparent 55%),
+    linear-gradient(135deg, color-mix(in srgb, var(--coral-50) 80%, white), color-mix(in srgb, var(--teal-50) 65%, white));
+  order: 4;
+}
+
+.cardIterationActions {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cardIterationRenameRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cardIterationPreviewGrid {
+  display: grid;
+  gap: 2px;
+}
+
+.cardIterationPreviewGrid p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--slate-700);
+}
+
+.dependencySection {
+  order: 2;
+}
+
+.dependencyTagRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.addDependencyIconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 62%, white), color-mix(in srgb, var(--slate-100) 80%, white));
+  color: var(--slate-700);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.addDependencyIconButton:hover {
+  border-color: var(--coral-300);
+  color: var(--coral-700);
+  transform: translateY(-1px);
+}
+
+.dependencyTag {
+  border: 1px solid color-mix(in srgb, var(--border-light) 78%, var(--teal-200));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 84%, white), color-mix(in srgb, var(--slate-100) 76%, white));
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--slate-700);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.58) inset, 0 8px 16px rgba(15, 23, 42, 0.14);
+}
+
+.dependencyTag:hover {
+  border-color: var(--coral-300);
+  color: var(--coral-700);
+  transform: translateY(-1px);
+}
+
+.summarySection {
+  order: 5;
+}
+
+.cardIterationHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cardIterationHead h4 {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--slate-800);
+}
+
+.cardIterationHead p {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--slate-600);
+}
+
+.cardIterationItem {
+  border-color: color-mix(in srgb, var(--coral-300) 45%, var(--border-light));
+  box-shadow: 0 6px 18px rgba(244, 99, 71, 0.12);
+}
+
+.iterationDraftSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.iterationDraftLabel {
+  font-size: var(--text-xs);
+  color: var(--slate-600);
+}
+
 .currentIterationBadge {
   display: inline-flex;
   align-items: center;
@@ -1751,7 +2009,7 @@
 .fieldBoardHint {
   margin-top: var(--space-3);
   font-size: var(--text-xs);
-  color: var(--slate-500);
+  color: color-mix(in srgb, var(--slate-500) 78%, var(--teal-600));
 }
 
 .editorFieldList {
@@ -2097,7 +2355,25 @@
 .tagPaletteItem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tagPaletteItem:hover {
+  background: var(--slate-50);
+}
+
+.cardIterationEntryRow {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -2274,6 +2550,14 @@
 
 .detailSection {
   margin-bottom: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--border-light) 70%, var(--slate-200));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 75%, white), color-mix(in srgb, var(--slate-100) 55%, white));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.62) inset;
 }
 
 .detailSection h4 {
@@ -2284,6 +2568,18 @@
   letter-spacing: 0.05em;
   color: var(--slate-400);
   margin: 0 0 var(--space-2) 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailSection h4::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--teal-400), var(--coral-400));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal-100) 55%, transparent);
 }
 
 .detailSection p {
@@ -2567,8 +2863,12 @@
   }
 
   .editorPage {
-    background: var(--slate-800);
+    background:
+      radial-gradient(circle at 10% 4%, rgba(45, 212, 191, 0.12), transparent 33%),
+      radial-gradient(circle at 92% -2%, rgba(251, 146, 60, 0.12), transparent 30%),
+      linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.98));
     border-color: var(--slate-600);
+    box-shadow: 0 28px 66px rgba(2, 6, 23, 0.62), 0 1px 0 rgba(148, 163, 184, 0.12) inset;
   }
 
   .editorEyebrow {
@@ -2588,9 +2888,24 @@
     color: var(--slate-200);
   }
 
+  .pendingFieldCard {
+    border-color: color-mix(in srgb, var(--amber-400) 42%, var(--coral-400));
+    background:
+      radial-gradient(circle at 100% 0%, rgba(251, 191, 36, 0.2), transparent 36%),
+      linear-gradient(180deg, rgba(71, 85, 105, 0.92), rgba(30, 41, 59, 0.96));
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.28), 0 18px 30px rgba(15, 23, 42, 0.42);
+  }
+
+  .pendingFieldBadge {
+    color: var(--amber-100);
+    background: linear-gradient(180deg, rgba(217, 119, 6, 0.72), rgba(180, 83, 9, 0.86));
+    border-color: rgba(251, 191, 36, 0.5);
+  }
+
   .fixedMetaCard {
-    background: var(--slate-700);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.92), rgba(30, 41, 59, 0.95));
     border-color: var(--slate-600);
+    box-shadow: 0 1px 0 rgba(148, 163, 184, 0.12) inset, 0 16px 28px rgba(2, 6, 23, 0.36);
   }
 
   .aiModelSelect,
@@ -2633,8 +2948,11 @@
   }
 
   .aiWorkbench {
-    background: color-mix(in srgb, var(--teal-700) 18%, var(--slate-800));
+    background:
+      radial-gradient(circle at 88% -8%, rgba(45, 212, 191, 0.18), transparent 36%),
+      linear-gradient(165deg, rgba(15, 118, 110, 0.22), rgba(15, 23, 42, 0.95));
     border-color: var(--slate-600);
+    box-shadow: 0 16px 30px rgba(2, 6, 23, 0.4), 0 1px 0 rgba(45, 212, 191, 0.14) inset;
   }
 
   .aiWorkbenchHeader h4 {
@@ -2788,6 +3106,86 @@
     border-color: var(--coral-400);
     background: rgba(249, 107, 71, 0.16);
     color: var(--coral-200);
+  }
+
+  .aiChannelSwitchLabel {
+    color: var(--slate-400);
+  }
+
+  .aiChannelSwitchGroup {
+    border-color: var(--slate-600);
+  }
+
+  .aiChannelSwitchButton {
+    color: var(--slate-300);
+  }
+
+  .aiChannelSwitchActive {
+    background: var(--coral-600);
+    color: #fff;
+  }
+
+  .cardIterationBoard {
+    border-color: var(--slate-600);
+    background:
+      radial-gradient(circle at 0% 0%, rgba(249, 107, 71, 0.18), transparent 55%),
+      linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.94));
+  }
+
+  .cardIterationHead h4 {
+    color: var(--slate-100);
+  }
+
+  .cardIterationHead p,
+  .iterationDraftLabel {
+    color: var(--slate-300);
+  }
+
+  .cardIterationItem {
+    border-color: var(--slate-600);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .addTagIconButton {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+    color: var(--slate-300);
+  }
+
+  .addTagIconButton:hover {
+    border-color: var(--coral-400);
+    color: var(--coral-200);
+  }
+
+  .addDependencyIconButton {
+    background: var(--slate-800);
+    border-color: var(--slate-600);
+    color: var(--slate-300);
+  }
+
+  .addDependencyIconButton:hover {
+    border-color: var(--coral-400);
+    color: var(--coral-200);
+  }
+
+  .tagPaletteItem:hover {
+    background: rgba(148, 163, 184, 0.12);
+  }
+
+  .dependencyTag {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.9), rgba(30, 41, 59, 0.94));
+    box-shadow: 0 1px 0 rgba(148, 163, 184, 0.12) inset, 0 8px 16px rgba(2, 6, 23, 0.28);
+  }
+
+  .fieldBoardHint {
+    color: color-mix(in srgb, var(--slate-300) 84%, var(--teal-200));
+  }
+
+  .detailSection {
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.86), rgba(30, 41, 59, 0.9));
+    border-color: var(--slate-600);
+    box-shadow: 0 1px 0 rgba(148, 163, 184, 0.12) inset;
   }
 
   .addRelationBtn {
@@ -2954,7 +3352,7 @@
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .editorGrid {
     grid-template-columns: 1fr;
   }
@@ -2963,6 +3361,16 @@
     grid-template-columns: 1fr;
   }
 
+  .fixedMetaTopRow {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  }
+
+  .customFieldList {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
   .fixedMetaTopRow {
     grid-template-columns: 1fr;
   }

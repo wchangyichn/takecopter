@@ -28,6 +28,24 @@ export interface SettingCard {
   }[];
   summaryIterations?: SettingSummaryIteration[];
   activeSummaryIterationId?: string;
+  cardIterations?: SettingCardIteration[];
+  activeCardIterationId?: string;
+}
+
+export interface SettingCardIteration {
+  id: string;
+  snapshot: {
+    title: string;
+    summary: string;
+    category?: string;
+    tags: SettingTag[];
+    customFields: SettingCustomField[];
+  };
+  versionTag?: string;
+  reasonType: 'manual' | 'card';
+  reasonText?: string;
+  reasonCardId?: string;
+  createdAt: string;
 }
 
 export interface SettingSummaryIteration {
