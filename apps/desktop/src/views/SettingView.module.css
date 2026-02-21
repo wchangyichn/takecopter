@@ -2607,10 +2607,19 @@
   color: var(--slate-600);
 }
 
-.previewShortcutHint {
-  margin: var(--space-2) 0 0;
-  font-size: 11px;
-  color: var(--slate-500);
+.previewTitleInput {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--slate-800);
+  margin: 0;
+}
+
+.previewTitleInput:focus-visible {
+  outline: none;
 }
 
 .previewActions {
@@ -2638,36 +2647,26 @@
 }
 
 .previewFieldCard {
+  width: 100%;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--bg-elevated), var(--slate-50));
   padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.previewFieldCard:hover {
+  border-color: color-mix(in srgb, var(--preview-accent, var(--coral-400)) 45%, var(--border-default));
+  transform: translateY(-1px);
 }
 
 .previewFieldHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  display: block;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--slate-800);
-}
-
-.previewFieldCount {
-  font-size: var(--text-xs);
-  color: var(--slate-500);
-}
-
-.previewFieldValue {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  color: var(--slate-700);
-  white-space: pre-wrap;
 }
 
 .previewRelationList {
@@ -2692,8 +2691,38 @@
   transform: translateY(-1px);
 }
 
-.detailDeleteCardButton {
+.previewDangerActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+.previewFieldDialogCard {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.previewFieldDialogMeta {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--slate-500);
+}
+
+.previewFieldDialogBody {
   margin-top: var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--slate-50) 75%, white), color-mix(in srgb, var(--slate-100) 55%, white));
+  padding: var(--space-3);
+}
+
+.previewFieldDialogBody p {
+  margin: 0;
+  color: var(--slate-700);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.detailDeleteCardButton {
   color: var(--rose-600);
 }
 
@@ -2757,6 +2786,7 @@
 }
 
 .relationItem {
+  border: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2897,12 +2927,8 @@
   }
 
   .previewSubtitle,
-  .previewFieldCount {
+  .previewTitleInput {
     color: var(--slate-300);
-  }
-
-  .previewShortcutHint {
-    color: var(--slate-400);
   }
 
   .previewTagChip {
@@ -2916,8 +2942,20 @@
     background: linear-gradient(180deg, var(--slate-800), var(--slate-700));
   }
 
-  .previewFieldHeader,
-  .previewFieldValue {
+  .previewFieldHeader {
+    color: var(--slate-100);
+  }
+
+  .previewFieldDialogMeta {
+    color: var(--slate-300);
+  }
+
+  .previewFieldDialogBody {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, var(--slate-800), var(--slate-700));
+  }
+
+  .previewFieldDialogBody p {
     color: var(--slate-100);
   }
 

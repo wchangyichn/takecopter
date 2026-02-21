@@ -165,6 +165,10 @@
   --z-overlay: 30;
   --z-modal: 40;
   --z-toast: 50;
+
+  --scrollbar-track: color-mix(in srgb, var(--slate-100) 88%, white);
+  --scrollbar-thumb: color-mix(in srgb, var(--coral-400) 42%, var(--slate-400));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--coral-500) 52%, var(--slate-500));
 }
 
 /* Dark Mode Override */
@@ -182,6 +186,10 @@
     
     --border-light: var(--slate-700);
     --border-default: var(--slate-600);
+
+    --scrollbar-track: color-mix(in srgb, var(--slate-900) 82%, var(--slate-800));
+    --scrollbar-thumb: color-mix(in srgb, var(--coral-400) 45%, var(--slate-500));
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--coral-300) 55%, var(--slate-400));
   }
 }
 
@@ -201,6 +209,32 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 body {

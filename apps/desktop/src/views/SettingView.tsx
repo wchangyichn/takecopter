@@ -37,16 +37,15 @@ type QuickCreateOption = {
   summary: string;
   type?: SettingCard['type'];
   category?: string;
-  titlePrefix: string;
 };
 
 const QUICK_CREATE_OPTIONS: QuickCreateOption[] = [
-  { key: 'blank', label: '空白卡', summary: '完全空白，不预设属性。', titlePrefix: '空白卡' },
-  { key: 'worldview', label: '世界观卡', summary: '空白世界观卡，仅预设分类为"世界观"，内容由你自行定义。', type: 'location', category: '世界观', titlePrefix: '世界观卡' },
-  { key: 'character', label: '角色卡', summary: '创建空白角色卡，后续按故事需要自由补充。', type: 'character', category: '角色', titlePrefix: '角色卡' },
-  { key: 'location', label: '地点卡', summary: '创建空白地点卡，适配世界观、势力、场景等设定。', type: 'location', category: '地点', titlePrefix: '地点卡' },
-  { key: 'item', label: '物品卡', summary: '创建空白物品卡，适配道具、能力、资源等设定。', type: 'item', category: '道具', titlePrefix: '物品卡' },
-  { key: 'event', label: '事件卡', summary: '创建空白事件卡，用于推进剧情节点与转折。', type: 'event', category: '事件', titlePrefix: '事件卡' },
+  { key: 'blank', label: '空白卡', summary: '完全空白，不预设属性。' },
+  { key: 'worldview', label: '世界观卡', summary: '空白世界观卡，仅预设分类为"世界观"，内容由你自行定义。', type: 'location', category: '世界观' },
+  { key: 'character', label: '角色卡', summary: '创建空白角色卡，后续按故事需要自由补充。', type: 'character', category: '角色' },
+  { key: 'location', label: '地点卡', summary: '创建空白地点卡，适配世界观、势力、场景等设定。', type: 'location', category: '地点' },
+  { key: 'item', label: '物品卡', summary: '创建空白物品卡，适配道具、能力、资源等设定。', type: 'item', category: '道具' },
+  { key: 'event', label: '事件卡', summary: '创建空白事件卡，用于推进剧情节点与转折。', type: 'event', category: '事件' },
 ];
 
 const STORY_SETUP_STEPS = ['角色基础', '空间与规则', '关键事件', '关系网络', '摘要完整度'];
@@ -163,6 +162,11 @@ interface PreviewDragState {
   startY: number;
   originX: number;
   originY: number;
+}
+
+interface PreviewFieldDialogState {
+  cardId: string;
+  fieldId: string;
 }
 
 interface SettingViewProps {
@@ -710,10 +714,6 @@ function cardMatchesTags(card: EditableCard, activeTagFilters: string[]): boolea
   return activeTagFilters.every((tag) => names.has(tag));
 }
 
-function cardCategoryLabel(card: EditableCard): string {
-  return card.category?.trim() || '未分类';
-}
-
 function cardTypeLabel(type: SettingCard['type']): string {
   return CARD_TYPE_OPTIONS.find((item) => item.type === type)?.label ?? '设定卡';
 }
@@ -736,6 +736,7 @@ export function SettingView({
   const [selectedCardId, setSelectedCardId] = useState<string | null>(() => sourceCards[0]?.id ?? null);
   const [openPreviewCardIds, setOpenPreviewCardIds] = useState<string[]>([]);
   const [previewWindowStateMap, setPreviewWindowStateMap] = useState<Record<string, PreviewWindowState>>({});
+  const [previewFieldDialog, setPreviewFieldDialog] = useState<PreviewFieldDialogState | null>(null);
   const [previewDragState, setPreviewDragState] = useState<PreviewDragState | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -917,6 +918,30 @@ export function SettingView({
   }, [cards, globalCategories, storyCategories]);
 
   const selectedCard = useMemo(() => cards.find((item) => item.id === selectedCardId) ?? null, [cards, selectedCardId]);
+
+  const selectedPreviewField = useMemo(() => {
+    if (!previewFieldDialog) {
+      return null;
+    }
+    const card = cards.find((item) => item.id === previewFieldDialog.cardId);
+    if (!card) {
+      return null;
+    }
+    const field = card.customFields.find((item) => (item.id ?? '') === previewFieldDialog.fieldId);
+    if (!field) {
+      return null;
+    }
+    return { card, field };
+  }, [cards, previewFieldDialog]);
+
+  useEffect(() => {
+    if (!previewFieldDialog) {
+      return;
+    }
+    if (!selectedPreviewField) {
+      setPreviewFieldDialog(null);
+    }
+  }, [previewFieldDialog, selectedPreviewField]);
 
   useEffect(() => {
     if (!selectedCard) {
@@ -1458,7 +1483,6 @@ export function SettingView({
     nameInput?: string,
     forcedType?: SettingCard['type'],
     forcedCategory?: string,
-    titlePrefix?: string,
   ) => {
     const nextIndex = cards.length + 1;
     let nextId = '';
@@ -1470,9 +1494,10 @@ export function SettingView({
     const nextType = forcedType ?? template?.preset.type ?? 'event';
     const normalizedName = nameInput?.trim();
     const initialFields = (template?.preset.customFields ?? []).map((field) => ({ ...field, initialValue: field.initialValue ?? field.value }));
+    const defaultTitle = normalizedName || (template ? `${template.name} ${nextIndex}` : `设定 ${nextIndex}`);
     const created: EditableCard = {
       id: nextId,
-      title: normalizedName || (template ? `${template.name} ${nextIndex}` : `${titlePrefix ?? cardTypeLabel(nextType)} ${nextIndex}`),
+      title: defaultTitle,
       type: nextType,
       summary: template?.preset.summary ?? '',
       content: template?.preset.content,
@@ -1488,7 +1513,7 @@ export function SettingView({
       relations: [],
       summaryIterations: [],
       initialSnapshot: {
-        title: normalizedName || (template ? `${template.name} ${nextIndex}` : `${titlePrefix ?? cardTypeLabel(nextType)} ${nextIndex}`),
+        title: defaultTitle,
         summary: template?.preset.summary ?? '',
         category: nextCategory,
         tags: (template?.preset.tags ?? []).map((tag) => ({ ...tag })),
@@ -3999,7 +4024,7 @@ export function SettingView({
                 <button
                   key={item.key}
                   className={styles.quickTypeButton}
-                  onClick={() => handleAddCard(undefined, newCardNameDraft, item.type, item.category, item.titlePrefix)}
+                  onClick={() => handleAddCard(undefined, newCardNameDraft, item.type, item.category)}
                 >
                   {item.label}
                 </button>
@@ -4143,10 +4168,41 @@ export function SettingView({
                   <>
                     <div className={styles.previewHero}>
                       <div>
-                        <span className={styles.detailType}>{cardTypeLabel(previewCard.type)} · {cardCategoryLabel(previewCard)}</span>
-                        <h2 className={styles.detailTitle}>{previewCard.title || '未命名设定'}</h2>
+                        <input
+                          className={styles.previewTitleInput}
+                          value={previewCard.title ?? ''}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            applyCards((prev) =>
+                              prev.map((item) => {
+                                if (item.id !== previewCard.id) {
+                                  return item;
+                                }
+                                const next = { ...item, title: value };
+                                if (!next.activeCardIterationId) {
+                                  return next;
+                                }
+                                const nextSnapshot = buildCardIterationSnapshot(next);
+                                return {
+                                  ...next,
+                                  cardIterations: (next.cardIterations ?? []).map((iteration) =>
+                                    iteration.id === next.activeCardIterationId
+                                      ? {
+                                          ...iteration,
+                                          snapshot: nextSnapshot,
+                                        }
+                                      : iteration
+                                  ),
+                                };
+                              })
+                            );
+                          }}
+                          placeholder="点击输入设定名称"
+                          aria-label="设定名称"
+                        />
                         <p className={styles.previewSubtitle}>高保真预览窗口，可同时打开多个卡片。</p>
-                        <p className={styles.previewShortcutHint}>快捷键：Esc 关闭当前窗口，Ctrl/Cmd + M 最小化当前窗口</p>
                       </div>
                       <div className={styles.previewActions}>
                         <Button
@@ -4172,28 +4228,6 @@ export function SettingView({
                           }}
                         >
                           保存为模版
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className={styles.inlineActionButton}
-                          onClick={() => {
-                            setSelectedCardId(previewCard.id);
-                            setRenameCardDraft(previewCard.title || '');
-                            setIsCardRenameOpen(true);
-                          }}
-                        >
-                          重命名
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className={styles.detailDeleteCardButton}
-                          onClick={() => {
-                            handleDeleteCardById(previewCard.id, previewCard.title);
-                          }}
-                        >
-                          删除卡片
                         </Button>
                       </div>
                     </div>
@@ -4251,37 +4285,20 @@ export function SettingView({
                         {previewCard.customFields.length > 0 ? (
                           previewCard.customFields.map((field, fieldIndex) => {
                             const fieldId = field.id ?? `preview-field-${fieldIndex}`;
-                            const relations = previewCard.relations
-                              .map((relation, relationIndex) => ({ ...relation, index: relationIndex }))
-                              .filter((relation) => relation.sourceFieldId === fieldId);
                             return (
-                              <article key={fieldId} className={styles.previewFieldCard}>
-                                <header className={styles.previewFieldHeader}>
-                                  <span>{field.name || `属性 ${fieldIndex + 1}`}</span>
-                                  <span className={styles.previewFieldCount}>关联 {relations.length}</span>
-                                </header>
-                                <p className={styles.previewFieldValue}>{field.value?.trim() || '暂无内容'}</p>
-                                {relations.length > 0 && (
-                                  <div className={styles.previewRelationList}>
-                                    {relations.map((relation) => {
-                                      const { targetCard, targetField } = resolveRelationTarget(relation);
-                                      if (!targetCard) {
-                                        return null;
-                                      }
-                                      return (
-                                        <button
-                                          key={`preview-relation-${fieldId}-${relation.index}`}
-                                          className={styles.previewRelationButton}
-                                          onClick={() => openCardPreview(targetCard.id)}
-                                        >
-                                          {relation.type} · {targetCard.title}
-                                          {targetField ? ` / ${targetField.name}` : ''}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </article>
+                              <button
+                                key={fieldId}
+                                type="button"
+                                className={styles.previewFieldCard}
+                                onClick={() => {
+                                  setPreviewFieldDialog({
+                                    cardId: previewCard.id,
+                                    fieldId,
+                                  });
+                                }}
+                              >
+                                <span className={styles.previewFieldHeader}>{field.name || `设定 ${fieldIndex + 1}`}</span>
+                              </button>
                             );
                           })
                         ) : (
@@ -4289,11 +4306,49 @@ export function SettingView({
                         )}
                       </div>
                     </div>
+
+                    <div className={styles.previewDangerActions}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={styles.detailDeleteCardButton}
+                        onClick={() => {
+                          handleDeleteCardById(previewCard.id, previewCard.title);
+                        }}
+                      >
+                        删除卡片
+                      </Button>
+                    </div>
                   </>
                 )}
               </section>
             );
           })}
+        </div>
+      )}
+
+      {selectedPreviewField && (
+        <div className={`${styles.managerOverlay} ${styles.topMostOverlay}`} role="presentation" onClick={() => setPreviewFieldDialog(null)}>
+          <div
+            className={`${styles.managerCard} ${styles.previewFieldDialogCard}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`设定详情预览：${selectedPreviewField.field.name || '未命名设定'}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.managerHeader}>
+              <h3>{selectedPreviewField.field.name || '未命名设定'}</h3>
+            </div>
+            <p className={styles.previewFieldDialogMeta}>来自卡片：{selectedPreviewField.card.title || '未命名设定'}</p>
+            <div className={styles.previewFieldDialogBody}>
+              <p>{selectedPreviewField.field.value?.trim() || '暂无内容'}</p>
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setPreviewFieldDialog(null)}>
+                关闭
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
