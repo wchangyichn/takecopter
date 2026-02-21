@@ -1,7 +1,7 @@
 import { useAppState } from './hooks/useAppState';
 import { useProjectData } from './hooks/useProjectData';
 import { AppShell } from './components/layout';
-import { HomeView, SettingView, CreateView, ProjectSetupView, RenameStoryDialog } from './views';
+import { HomeView, SettingView, CreateView, ProjectSetupView, RenameStoryDialog, NewStoryDialog, DeleteStoryDialog } from './views';
 import { useState } from 'react';
 import './index.css';
 
@@ -15,6 +15,7 @@ function App() {
     getGlobalLibrary,
     createStory,
     renameStory,
+    deleteStory,
     saveSettingCards,
     saveStoryLibrary,
     saveGlobalLibrary,
@@ -37,16 +38,31 @@ function App() {
   const [isSetupBusy, setIsSetupBusy] = useState(false);
   const [showProjectGuide, setShowProjectGuide] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [isNewStoryDialogOpen, setIsNewStoryDialogOpen] = useState(false);
+  const [isCreatingStory, setIsCreatingStory] = useState(false);
 
   const handleStorySelect = (id: string) => {
     selectStory(id);
     setView('setting');
   };
 
-  const handleCreateStory = async () => {
-    const storyId = await createStory();
-    selectStory(storyId);
-    setView('setting');
+  const handleCreateStory = async (title: string) => {
+    try {
+      setIsCreatingStory(true);
+      const storyId = await createStory(title);
+      selectStory(storyId);
+      setView('setting');
+      setIsNewStoryDialogOpen(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '创建故事失败');
+    } finally {
+      setIsCreatingStory(false);
+    }
+  };
+
+  const handleOpenCreateStoryDialog = () => {
+    setIsNewStoryDialogOpen(true);
   };
 
   const handleRenameStory = (storyId: string) => {
@@ -55,6 +71,27 @@ function App() {
       return;
     }
     setRenameTarget({ id: current.id, title: current.title });
+  };
+
+  const handleDeleteStoryRequest = (storyId: string) => {
+    const current = stories.find((item) => item.id === storyId);
+    if (!current) {
+      return;
+    }
+    setDeleteTarget({ id: current.id, title: current.title });
+  };
+
+  const handleDeleteStory = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    await deleteStory(deleteTarget.id);
+    if (selectedStoryId === deleteTarget.id) {
+      selectStory(null);
+      setView('home');
+    }
+    setDeleteTarget(null);
   };
 
   const handleImportProject = async (file: File) => {
@@ -181,7 +218,8 @@ function App() {
           <HomeView
             stories={stories}
             onStorySelect={handleStorySelect}
-            onCreateStory={handleCreateStory}
+            onCreateStory={handleOpenCreateStoryDialog}
+            isCreatingStory={isCreatingStory}
             onExportProject={exportProjectFile}
             onBackupLocalDatabase={handleBackupLocalDatabase}
             onRelinkLocalDatabase={handleRelinkLocalDatabase}
@@ -190,6 +228,7 @@ function App() {
             onOpenStoryDatabase={handleOpenStoryDatabase}
             onExportStory={handleExportStory}
             onRenameStory={handleRenameStory}
+            onDeleteStory={handleDeleteStoryRequest}
           />
         );
       case 'setting':
@@ -207,7 +246,8 @@ function App() {
           <HomeView
             stories={stories}
             onStorySelect={handleStorySelect}
-            onCreateStory={handleCreateStory}
+            onCreateStory={handleOpenCreateStoryDialog}
+            isCreatingStory={isCreatingStory}
             onExportProject={exportProjectFile}
             onBackupLocalDatabase={handleBackupLocalDatabase}
             onRelinkLocalDatabase={handleRelinkLocalDatabase}
@@ -216,6 +256,7 @@ function App() {
             onOpenStoryDatabase={handleOpenStoryDatabase}
             onExportStory={handleExportStory}
             onRenameStory={handleRenameStory}
+            onDeleteStory={handleDeleteStoryRequest}
           />
         );
       case 'create':
@@ -229,7 +270,8 @@ function App() {
           <HomeView
             stories={stories}
             onStorySelect={handleStorySelect}
-            onCreateStory={handleCreateStory}
+            onCreateStory={handleOpenCreateStoryDialog}
+            isCreatingStory={isCreatingStory}
             onExportProject={exportProjectFile}
             onBackupLocalDatabase={handleBackupLocalDatabase}
             onRelinkLocalDatabase={handleRelinkLocalDatabase}
@@ -238,6 +280,7 @@ function App() {
             onOpenStoryDatabase={handleOpenStoryDatabase}
             onExportStory={handleExportStory}
             onRenameStory={handleRenameStory}
+            onDeleteStory={handleDeleteStoryRequest}
           />
         );
       default:
@@ -245,7 +288,8 @@ function App() {
           <HomeView
             stories={stories}
             onStorySelect={handleStorySelect}
-            onCreateStory={handleCreateStory}
+            onCreateStory={handleOpenCreateStoryDialog}
+            isCreatingStory={isCreatingStory}
             onExportProject={exportProjectFile}
             onBackupLocalDatabase={handleBackupLocalDatabase}
             onRelinkLocalDatabase={handleRelinkLocalDatabase}
@@ -254,6 +298,7 @@ function App() {
             onOpenStoryDatabase={handleOpenStoryDatabase}
             onExportStory={handleExportStory}
             onRenameStory={handleRenameStory}
+            onDeleteStory={handleDeleteStoryRequest}
           />
         );
     }
@@ -329,6 +374,21 @@ function App() {
           }
           await renameStory(renameTarget.id, title);
         }}
+      />
+      <NewStoryDialog
+        open={isNewStoryDialogOpen}
+        onClose={() => {
+          if (!isCreatingStory) {
+            setIsNewStoryDialogOpen(false);
+          }
+        }}
+        onConfirm={handleCreateStory}
+      />
+      <DeleteStoryDialog
+        open={Boolean(deleteTarget)}
+        storyTitle={deleteTarget?.title ?? ''}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteStory}
       />
     </>
   );

@@ -228,6 +228,10 @@ class TauriRepository implements ProjectDataRepository {
     return hydrateStory(story);
   }
 
+  async deleteStory(storyId: string): Promise<void> {
+    await invoke('delete_story', { storyId });
+  }
+
   async updateSettings(storyId: string, settings: SettingCard[]): Promise<void> {
     await invoke('update_settings', { storyId, settings });
   }

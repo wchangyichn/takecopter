@@ -10,8 +10,9 @@ interface UseProjectDataResult {
   getWorkspaceTree: (storyId: string | null) => TreeNode[];
   getWorkspaceLibrary: (storyId: string | null) => SettingLibrary;
   getGlobalLibrary: () => SettingLibrary;
-  createStory: (title?: string) => Promise<string>;
+  createStory: (title: string) => Promise<string>;
   renameStory: (storyId: string, title: string) => Promise<void>;
+  deleteStory: (storyId: string) => Promise<void>;
   saveSettingCards: (storyId: string, cards: SettingCard[]) => Promise<void>;
   saveStoryLibrary: (storyId: string, library: SettingLibrary) => Promise<void>;
   saveGlobalLibrary: (library: SettingLibrary) => Promise<void>;
@@ -32,7 +33,6 @@ interface UseProjectDataResult {
   bootError: string | null;
 }
 
-const storySuffix = ['晨雾', '夜航', '折光', '回潮', '暗线', '远火', '风眼'];
 const DEFAULT_GLOBAL_CATEGORIES = ['世界观', '角色', '道具'];
 
 function withDefaultGlobalCategories(library: SettingLibrary): SettingLibrary {
@@ -153,14 +153,16 @@ export function useProjectData(): UseProjectDataResult {
   }, [reload]);
 
   const createStory = useCallback(
-    async (title?: string) => {
-      const count = projectData.stories.length + 1;
-      const fallback = `新故事 ${count} · ${storySuffix[count % storySuffix.length]}`;
+    async (title: string) => {
+      const nextTitle = title.trim();
+      if (!nextTitle) {
+        throw new Error('故事名称不能为空');
+      }
       let createdId = '';
 
       await runMutation(async () => {
         const created = await repository.createStory({
-          title: title && title.trim() ? title : fallback,
+          title: nextTitle,
           description: '在这里开始搭建设定与创作结构。',
         });
         createdId = created.id;
@@ -168,13 +170,22 @@ export function useProjectData(): UseProjectDataResult {
 
       return createdId;
     },
-    [projectData.stories.length, repository, runMutation]
+    [repository, runMutation]
   );
 
   const renameStory = useCallback(
     async (storyId: string, title: string) => {
       await runMutation(async () => {
         await repository.renameStory(storyId, title);
+      });
+    },
+    [repository, runMutation]
+  );
+
+  const deleteStory = useCallback(
+    async (storyId: string) => {
+      await runMutation(async () => {
+        await repository.deleteStory(storyId);
       });
     },
     [repository, runMutation]
@@ -379,6 +390,7 @@ export function useProjectData(): UseProjectDataResult {
     getGlobalLibrary,
     createStory,
     renameStory,
+    deleteStory,
     saveSettingCards,
     saveStoryLibrary,
     saveGlobalLibrary,

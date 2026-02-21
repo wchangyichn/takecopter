@@ -65,6 +65,7 @@ interface HomeViewProps {
   stories: Story[];
   onStorySelect: (id: string) => void;
   onCreateStory: () => void;
+  isCreatingStory?: boolean;
   onExportProject: () => void;
   onBackupLocalDatabase: () => void;
   onRelinkLocalDatabase: () => void;
@@ -73,12 +74,14 @@ interface HomeViewProps {
   onOpenStoryDatabase: (id: string) => void;
   onExportStory: (id: string) => void;
   onRenameStory: (id: string) => void;
+  onDeleteStory: (id: string) => void;
 }
 
 export function HomeView({
   stories,
   onStorySelect,
   onCreateStory,
+  isCreatingStory = false,
   onExportProject,
   onBackupLocalDatabase,
   onRelinkLocalDatabase,
@@ -87,6 +90,7 @@ export function HomeView({
   onOpenStoryDatabase,
   onExportStory,
   onRenameStory,
+  onDeleteStory,
 }: HomeViewProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [isModelKeyManagerOpen, setIsModelKeyManagerOpen] = useState(false);
@@ -167,7 +171,7 @@ export function HomeView({
           <h2>故事首页</h2>
           <p>新建故事、查看故事列表，并进入故事页面继续创作</p>
         </div>
-        <Button size="lg" onClick={onCreateStory}>
+        <Button size="lg" onClick={onCreateStory} isLoading={isCreatingStory}>
           <span aria-hidden="true">+</span> 创建新故事
         </Button>
       </header>
@@ -189,6 +193,7 @@ export function HomeView({
                   onOpenStoryDatabase={onOpenStoryDatabase}
                   onExportStory={onExportStory}
                   onRenameStory={onRenameStory}
+                  onDeleteStory={onDeleteStory}
                 />
               ))}
             </div>
@@ -196,7 +201,7 @@ export function HomeView({
             <Card className={styles.emptyCard}>
               <h3>还没有故事项目</h3>
               <p>从「创建新故事」开始，搭建你的设定与创作流程。</p>
-              <Button onClick={onCreateStory}>立即创建</Button>
+              <Button onClick={onCreateStory} isLoading={isCreatingStory}>立即创建</Button>
             </Card>
           )}
         </section>
@@ -206,6 +211,7 @@ export function HomeView({
             <h3>快捷操作</h3>
             <div className={styles.actionList}>
               <button
+                type="button"
                 className={styles.actionItem}
                 onClick={() => {
                   importInputRef.current?.click();
@@ -213,6 +219,7 @@ export function HomeView({
               >
                 <span className={styles.actionIcon} style={{ background: 'var(--teal-100)', color: 'var(--teal-600)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>导入项目</title>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="17,8 12,3 7,8" />
                     <line x1="12" y1="3" x2="12" y2="15" />
@@ -220,9 +227,10 @@ export function HomeView({
                 </span>
                 <span>导入故事/项目文件</span>
               </button>
-              <button className={styles.actionItem} onClick={() => console.log('Templates')}>
+              <button type="button" className={styles.actionItem} onClick={() => console.log('Templates')}>
                 <span className={styles.actionIcon} style={{ background: 'var(--violet-100)', color: 'var(--violet-600)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>浏览模板</title>
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                     <line x1="3" y1="9" x2="21" y2="9" />
                     <line x1="9" y1="21" x2="9" y2="9" />
@@ -230,17 +238,19 @@ export function HomeView({
                 </span>
                 <span>浏览故事模板</span>
               </button>
-              <button className={styles.actionItem} onClick={onExportProject}>
+              <button type="button" className={styles.actionItem} onClick={onExportProject}>
                 <span className={styles.actionIcon} style={{ background: 'var(--amber-100)', color: 'var(--amber-600)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>备份项目</title>
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
                 </span>
                 <span>备份全部项目</span>
               </button>
-              <button className={styles.actionItem} onClick={onBackupLocalDatabase}>
+              <button type="button" className={styles.actionItem} onClick={onBackupLocalDatabase}>
                 <span className={styles.actionIcon} style={{ background: 'var(--rose-100)', color: 'var(--rose-600)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>备份数据库</title>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <path d="M7 10l5 5 5-5" />
                     <path d="M12 15V3" />
@@ -248,9 +258,10 @@ export function HomeView({
                 </span>
                 <span>备份本机数据库</span>
               </button>
-              <button className={styles.actionItem} onClick={onRelinkLocalDatabase}>
+              <button type="button" className={styles.actionItem} onClick={onRelinkLocalDatabase}>
                 <span className={styles.actionIcon} style={{ background: 'var(--slate-200)', color: 'var(--slate-700)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>重新链接数据库</title>
                     <path d="M4 4v6h6" />
                     <path d="M20 20v-6h-6" />
                     <path d="M5.64 15A9 9 0 0 0 20 12.36M4 11.64A9 9 0 0 1 18.36 9" />
@@ -258,9 +269,10 @@ export function HomeView({
                 </span>
                 <span>重新链接本地数据库</span>
               </button>
-              <button className={styles.actionItem} onClick={openModelKeyManager}>
+              <button type="button" className={styles.actionItem} onClick={openModelKeyManager}>
                 <span className={styles.actionIcon} style={{ background: 'var(--violet-100)', color: 'var(--violet-600)' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <title>模型密钥设置</title>
                     <path d="M12 15v2m0-10v2m5 3h2M5 12H3m14.95 4.95 1.41 1.41M5.64 5.64 4.22 4.22m13.73-0.01-1.41 1.41M5.64 18.36l-1.42 1.42" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
@@ -307,8 +319,8 @@ export function HomeView({
       </div>
 
       {isModelKeyManagerOpen && (
-        <div className={styles.modalOverlay} role="presentation" onClick={() => setIsModelKeyManagerOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <div className={styles.modalOverlay} role="presentation">
+          <div className={styles.modalCard} role="dialog" aria-modal="true">
             <h3>模型密钥设置</h3>
             <p className={styles.modalHint}>密钥需手动输入，仅保存在当前设备。不同模型可同时保存，方便切换。</p>
             <p className={styles.modalMeta}>已配置模型：{configuredModelCount}/{MODEL_OPTIONS.length}</p>
@@ -325,6 +337,7 @@ export function HomeView({
               <div className={styles.modalActions}>
                 <Button size="sm" variant="secondary" onClick={handleSaveModelKey}>保存密钥</Button>
                 <Button size="sm" variant="ghost" onClick={handleDeleteModelKey}>删除当前密钥</Button>
+                <Button size="sm" variant="ghost" onClick={() => setIsModelKeyManagerOpen(false)}>关闭</Button>
               </div>
             </div>
             <div className={styles.modelList}>
@@ -356,6 +369,7 @@ interface StoryCardProps {
   onOpenStoryDatabase: (id: string) => void;
   onExportStory: (id: string) => void;
   onRenameStory: (id: string) => void;
+  onDeleteStory: (id: string) => void;
 }
 
 function StoryCard({
@@ -369,6 +383,7 @@ function StoryCard({
   onOpenStoryDatabase,
   onExportStory,
   onRenameStory,
+  onDeleteStory,
 }: StoryCardProps) {
   return (
     <Card
@@ -386,6 +401,7 @@ function StoryCard({
         <div className={styles.cardCoverInner}>
           <span className={styles.cardIcon}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <title>故事封面</title>
               <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </span>
@@ -399,6 +415,7 @@ function StoryCard({
           {isHovered && (
             <div className={styles.cardActions}>
               <button
+                type="button"
                 className={styles.cardAction}
                 aria-label="打开故事文件夹"
                 onClick={(e) => {
@@ -407,10 +424,12 @@ function StoryCard({
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>打开故事文件夹</title>
                   <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
                 </svg>
               </button>
               <button
+                type="button"
                 className={styles.cardAction}
                 aria-label="导出单个故事"
                 onClick={(e) => {
@@ -419,12 +438,14 @@ function StoryCard({
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>导出故事</title>
                   <path d="M12 3v12" />
                   <path d="M7 10l5 5 5-5" />
                   <path d="M5 21h14" />
                 </svg>
               </button>
               <button
+                type="button"
                 className={styles.cardAction}
                 aria-label="重命名故事"
                 onClick={(e) => {
@@ -433,11 +454,31 @@ function StoryCard({
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>重命名故事</title>
                   <path d="M12 20h9" />
                   <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                 </svg>
               </button>
               <button
+                type="button"
+                className={styles.cardAction}
+                aria-label="删除故事"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteStory(story.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>删除故事</title>
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </button>
+              <button
+                type="button"
                 className={styles.cardAction}
                 aria-label="打开故事数据库"
                 onClick={(e) => {
@@ -446,14 +487,16 @@ function StoryCard({
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>打开故事数据库</title>
                   <rect x="3" y="3" width="18" height="8" rx="1" />
                   <rect x="3" y="13" width="18" height="8" rx="1" />
                   <line x1="8" y1="7" x2="8.01" y2="7" />
                   <line x1="8" y1="17" x2="8.01" y2="17" />
                 </svg>
               </button>
-              <button className={styles.cardAction} aria-label="进入故事页面" onClick={(e) => { e.stopPropagation(); onSelect(story.id); }}>
+              <button type="button" className={styles.cardAction} aria-label="进入故事页面" onClick={(e) => { e.stopPropagation(); onSelect(story.id); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <title>进入故事页面</title>
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12,5 19,12 12,19" />
                 </svg>

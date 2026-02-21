@@ -534,6 +534,20 @@ export class ProjectRepository implements ProjectDataRepository {
     };
   }
 
+  async deleteStory(storyId: string): Promise<void> {
+    const db = await this.getDb();
+    db.exec('BEGIN');
+    try {
+      db.exec(`DELETE FROM workspaces WHERE story_id = ${sqlText(storyId)}`);
+      db.exec(`DELETE FROM stories WHERE id = ${sqlText(storyId)}`);
+      db.exec('COMMIT');
+      await this.persist(db);
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   async updateSettings(storyId: string, settings: SettingCard[]): Promise<void> {
     const db = await this.getDb();
     db.exec('BEGIN');

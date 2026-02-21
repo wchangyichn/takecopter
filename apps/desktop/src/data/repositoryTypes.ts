@@ -38,6 +38,7 @@ export interface ProjectDataRepository {
   load: () => Promise<ProjectData>;
   createStory: (input: CreateStoryInput) => Promise<Story>;
   renameStory: (storyId: string, title: string) => Promise<Story>;
+  deleteStory: (storyId: string) => Promise<void>;
   updateSettings: (storyId: string, settings: SettingCard[]) => Promise<void>;
   updateStoryLibrary: (storyId: string, library: SettingLibrary) => Promise<void>;
   updateGlobalLibrary: (library: SettingLibrary) => Promise<void>;
