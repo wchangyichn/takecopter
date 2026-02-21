@@ -30,16 +30,36 @@ export interface SettingCard {
   activeSummaryIterationId?: string;
   cardIterations?: SettingCardIteration[];
   activeCardIterationId?: string;
+  initialSnapshot?: {
+    title: string;
+    summary: string;
+    category?: string;
+    tags: SettingTag[];
+    customFields: SettingCustomField[];
+    relations?: {
+      targetId: string;
+      type: string;
+      sourceFieldId?: string;
+      targetFieldId?: string;
+    }[];
+  };
 }
 
 export interface SettingCardIteration {
   id: string;
+  parentIterationId?: string;
   snapshot: {
     title: string;
     summary: string;
     category?: string;
     tags: SettingTag[];
     customFields: SettingCustomField[];
+    relations?: {
+      targetId: string;
+      type: string;
+      sourceFieldId?: string;
+      targetFieldId?: string;
+    }[];
   };
   versionTag?: string;
   reasonType: 'manual' | 'card';
@@ -69,6 +89,7 @@ export interface SettingCustomField {
   h?: number;
   iterations?: SettingFieldIteration[];
   activeIterationId?: string;
+  initialValue?: string;
 }
 
 export interface SettingFieldIteration {

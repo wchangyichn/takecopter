@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Panel } from '../components/ui';
-import type { SettingCard, SettingCardIteration, SettingCustomField, SettingFieldIteration, SettingLibrary, SettingSummaryIteration, SettingTag, SettingTemplate } from '../types';
+import type { SettingCard, SettingCardIteration, SettingCustomField, SettingFieldIteration, SettingLibrary, SettingTag, SettingTemplate } from '../types';
 import styles from './SettingView.module.css';
 
 const cardPalette = ['var(--coral-400)', 'var(--violet-400)', 'var(--teal-400)', 'var(--amber-400)', 'var(--rose-400)'];
@@ -19,8 +19,10 @@ const MODEL_OPTIONS = [
   { id: 'deepseek:deepseek-chat', label: 'DeepSeek（DeepSeek Chat）', webUrl: 'https://chat.deepseek.com/' },
   { id: 'qwen:qwen-max', label: '通义千问（Qwen Max）', webUrl: 'https://chat.qwen.ai/' },
 ] as const;
+const ORIGIN_ITERATION_ID = '__origin__';
 
 const RELATION_TYPE_OPTIONS = ['参考', '约束', '冲突', '触发', '揭示', '归属', '因果', '回收'];
+const ORIGIN_CARD_ITERATION_ID = '__origin_card__';
 
 const CARD_TYPE_OPTIONS: Array<{ type: SettingCard['type']; label: string; summary: string }> = [
   { type: 'character', label: '角色卡', summary: '创建空白角色卡，后续按故事需要自由补充。' },
@@ -476,6 +478,7 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
               }))
           : [],
         activeIterationId: typeof field.activeIterationId === 'string' ? field.activeIterationId : undefined,
+        initialValue: typeof field.initialValue === 'string' ? field.initialValue : field.value,
         size: field.size === 'sm' || field.size === 'md' || field.size === 'lg' ? field.size : 'md',
         x: typeof field.x === 'number' ? field.x : (index % 3) * (FIELD_UNIT_WIDTH + 12),
         y: typeof field.y === 'number' ? field.y : Math.floor(index / 3) * (FIELD_UNIT_HEIGHT + 12),
@@ -501,6 +504,7 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
             .filter((item) => Boolean(item) && typeof item.id === 'string' && item.snapshot && typeof item.snapshot === 'object')
             .map((item) => ({
               id: item.id,
+              parentIterationId: typeof item.parentIterationId === 'string' ? item.parentIterationId : undefined,
               snapshot: {
                 title: typeof item.snapshot.title === 'string' ? item.snapshot.title : card.title,
                 summary: typeof item.snapshot.summary === 'string' ? item.snapshot.summary : card.summary,
@@ -522,8 +526,25 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
                       h: field.h,
                       iterations: Array.isArray(field.iterations) ? field.iterations.map((iter) => ({ ...iter })) : [],
                       activeIterationId: field.activeIterationId,
+                      initialValue: typeof field.initialValue === 'string' ? field.initialValue : field.value,
                     }))
-                  : (card.customFields ?? []).map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+                  : (card.customFields ?? []).map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })), initialValue: field.initialValue ?? field.value })),
+                relations: Array.isArray(item.snapshot.relations)
+                  ? item.snapshot.relations
+                      .filter((relation) => relation && typeof relation.targetId === 'string' && relation.targetId.trim().length > 0)
+                      .map((relation) => ({
+                        targetId: relation.targetId,
+                        type: typeof relation.type === 'string' && relation.type.trim().length > 0 ? relation.type : '关联',
+                        sourceFieldId:
+                          typeof relation.sourceFieldId === 'string' && relation.sourceFieldId.trim().length > 0
+                            ? relation.sourceFieldId
+                            : undefined,
+                        targetFieldId:
+                          typeof relation.targetFieldId === 'string' && relation.targetFieldId.trim().length > 0
+                            ? relation.targetFieldId
+                            : undefined,
+                      }))
+                  : (card.relations ?? []).map((relation) => ({ ...relation })),
               },
               versionTag: typeof item.versionTag === 'string' ? item.versionTag : undefined,
               reasonType: item.reasonType === 'card' ? 'card' : 'manual',
@@ -533,6 +554,54 @@ function normalizeCards(cards: SettingCard[]): EditableCard[] {
             }))
         : [],
       activeCardIterationId: typeof card.activeCardIterationId === 'string' ? card.activeCardIterationId : undefined,
+      initialSnapshot:
+        card.initialSnapshot && typeof card.initialSnapshot === 'object'
+          ? {
+              title: typeof card.initialSnapshot.title === 'string' ? card.initialSnapshot.title : card.title,
+              summary: typeof card.initialSnapshot.summary === 'string' ? card.initialSnapshot.summary : card.summary,
+              category: typeof card.initialSnapshot.category === 'string' ? card.initialSnapshot.category : card.category,
+              tags: Array.isArray(card.initialSnapshot.tags)
+                ? card.initialSnapshot.tags.map((tag) => ({ name: tag.name, color: tag.color }))
+                : (card.tags ?? []).map((tag) => ({ ...tag })),
+              customFields: Array.isArray(card.initialSnapshot.customFields)
+                ? card.initialSnapshot.customFields.map((field, index) => ({
+                    id: field.id ?? `field-${uniqueId}-initial-${index + 1}`,
+                    name: field.name,
+                    value: field.value,
+                    size: field.size,
+                    x: field.x,
+                    y: field.y,
+                    w: field.w,
+                    h: field.h,
+                    iterations: Array.isArray(field.iterations) ? field.iterations.map((iter) => ({ ...iter })) : [],
+                    activeIterationId: field.activeIterationId,
+                    initialValue: typeof field.initialValue === 'string' ? field.initialValue : field.value,
+                  }))
+                : (card.customFields ?? []).map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })), initialValue: field.initialValue ?? field.value })),
+              relations: Array.isArray(card.initialSnapshot.relations)
+                ? card.initialSnapshot.relations.map((relation) => ({ ...relation }))
+                : (card.relations ?? []).map((relation) => ({ ...relation })),
+            }
+          : {
+              title: card.title,
+              summary: card.summary,
+              category: card.category,
+              tags: (card.tags ?? []).map((tag) => ({ ...tag })),
+              customFields: (card.customFields ?? []).map((field, index) => ({
+                id: field.id ?? `field-${uniqueId}-initial-fallback-${index + 1}`,
+                name: field.name,
+                value: field.value,
+                size: field.size,
+                x: field.x,
+                y: field.y,
+                w: field.w,
+                h: field.h,
+                iterations: Array.isArray(field.iterations) ? field.iterations.map((iter) => ({ ...iter })) : [],
+                activeIterationId: field.activeIterationId,
+                initialValue: typeof field.initialValue === 'string' ? field.initialValue : field.value,
+              })),
+              relations: (card.relations ?? []).map((relation) => ({ ...relation })),
+            },
     };
   });
 }
@@ -554,8 +623,34 @@ function cloneEditableCard(card: EditableCard): EditableCard {
         ...iteration.snapshot,
         tags: iteration.snapshot.tags.map((tag) => ({ ...tag })),
         customFields: iteration.snapshot.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+        relations: (iteration.snapshot.relations ?? []).map((relation) => ({ ...relation })),
       },
     })),
+    initialSnapshot: card.initialSnapshot
+      ? {
+          ...card.initialSnapshot,
+          tags: card.initialSnapshot.tags.map((tag) => ({ ...tag })),
+          customFields: card.initialSnapshot.customFields.map((field) => ({
+            ...field,
+            iterations: field.iterations?.map((iteration) => ({ ...iteration })),
+          })),
+          relations: (card.initialSnapshot.relations ?? []).map((relation) => ({ ...relation })),
+        }
+      : undefined,
+  };
+}
+
+function buildCardIterationSnapshot(card: EditableCard): SettingCardIteration['snapshot'] {
+  return {
+    title: card.title,
+    summary: card.summary,
+    category: card.category,
+    tags: card.tags.map((tag) => ({ ...tag })),
+    customFields: card.customFields.map((field) => ({
+      ...field,
+      iterations: (field.iterations ?? []).map((iteration) => ({ ...iteration })),
+    })),
+    relations: card.relations.map((relation) => ({ ...relation })),
   };
 }
 
@@ -745,19 +840,16 @@ export function SettingView({
   const [cardDependencyTarget, setCardDependencyTarget] = useState('');
   const [cardDependencyType, setCardDependencyType] = useState('参考');
   const [fieldIterationDrafts, setFieldIterationDrafts] = useState<Record<string, IterationDraftState>>({});
-  const [summaryIterationDraft, setSummaryIterationDraft] = useState<IterationDraftState>({
-    open: false,
-    value: '',
-    versionTag: '',
-    reasonType: 'manual',
-    reasonText: '',
-    reasonCardId: '',
-  });
-  const [summaryIterationDrawerOpen, setSummaryIterationDrawerOpen] = useState(false);
-  const [fieldIterationDrawersOpen, setFieldIterationDrawersOpen] = useState<Record<string, boolean>>({});
+  const [activeFieldIterationDraftFieldId, setActiveFieldIterationDraftFieldId] = useState<string | null>(null);
+  const [fieldIterationHistoryFieldId, setFieldIterationHistoryFieldId] = useState<string | null>(null);
+  const [editingFieldIterationFieldId, setEditingFieldIterationFieldId] = useState<string | null>(null);
+  const [editingFieldIterationId, setEditingFieldIterationId] = useState<string | null>(null);
+  const [editingFieldIterationVersionTag, setEditingFieldIterationVersionTag] = useState('');
+  const [editingFieldIterationReasonType, setEditingFieldIterationReasonType] = useState<IterationReasonType>('manual');
+  const [editingFieldIterationReasonText, setEditingFieldIterationReasonText] = useState('');
+  const [editingFieldIterationReasonCardId, setEditingFieldIterationReasonCardId] = useState('');
   const [isCardIterationHistoryOpen, setIsCardIterationHistoryOpen] = useState(false);
-  const [editingCardIterationId, setEditingCardIterationId] = useState<string | null>(null);
-  const [editingCardIterationVersionTag, setEditingCardIterationVersionTag] = useState('');
+  const [isCardSwitchAnimating, setIsCardSwitchAnimating] = useState(false);
   const [cardIterationDraft, setCardIterationDraft] = useState<Omit<IterationDraftState, 'value'>>({
     open: false,
     versionTag: '',
@@ -972,6 +1064,20 @@ export function SettingView({
     const next = active.versionTag?.trim();
     return next && next.length > 0 ? next : '原始';
   }, [selectedCard]);
+
+  const selectedFieldIterationTarget = useMemo(() => {
+    if (!selectedCard || !fieldIterationHistoryFieldId) {
+      return null;
+    }
+    return selectedCard.customFields.find((field) => (field.id ?? '') === fieldIterationHistoryFieldId) ?? null;
+  }, [fieldIterationHistoryFieldId, selectedCard]);
+
+  const selectedFieldDraftTarget = useMemo(() => {
+    if (!selectedCard || !activeFieldIterationDraftFieldId) {
+      return null;
+    }
+    return selectedCard.customFields.find((field) => (field.id ?? '') === activeFieldIterationDraftFieldId) ?? null;
+  }, [activeFieldIterationDraftFieldId, selectedCard]);
 
   const toolbarActiveDescendant = useMemo(() => {
     if (!toolbarTagSearchOpen) {
@@ -1363,6 +1469,7 @@ export function SettingView({
     const nextCategory = forcedCategory ?? selectedCategory ?? template?.preset.category ?? undefined;
     const nextType = forcedType ?? template?.preset.type ?? 'event';
     const normalizedName = nameInput?.trim();
+    const initialFields = (template?.preset.customFields ?? []).map((field) => ({ ...field, initialValue: field.initialValue ?? field.value }));
     const created: EditableCard = {
       id: nextId,
       title: normalizedName || (template ? `${template.name} ${nextIndex}` : `${titlePrefix ?? cardTypeLabel(nextType)} ${nextIndex}`),
@@ -1372,7 +1479,7 @@ export function SettingView({
       imageUrl: template?.preset.imageUrl,
       category: nextCategory,
       tags: (template?.preset.tags ?? []).map((tag) => ({ ...tag })),
-      customFields: (template?.preset.customFields ?? []).map((field) => ({ ...field })),
+      customFields: initialFields,
       color: template?.preset.color ?? cardPalette[nextIndex % cardPalette.length],
       position: {
         x: 120 + (nextIndex % 5) * 56,
@@ -1380,6 +1487,14 @@ export function SettingView({
       },
       relations: [],
       summaryIterations: [],
+      initialSnapshot: {
+        title: normalizedName || (template ? `${template.name} ${nextIndex}` : `${titlePrefix ?? cardTypeLabel(nextType)} ${nextIndex}`),
+        summary: template?.preset.summary ?? '',
+        category: nextCategory,
+        tags: (template?.preset.tags ?? []).map((tag) => ({ ...tag })),
+        customFields: initialFields.map((field) => ({ ...field, iterations: field.iterations?.map((iteration) => ({ ...iteration })) })),
+        relations: [],
+      },
     };
 
     applyCards((prev) => [...prev, created]);
@@ -1541,7 +1656,31 @@ export function SettingView({
       return;
     }
 
-    applyCards((prev) => prev.map((item) => (item.id === selectedCard.id ? updater(item) : item)));
+    applyCards((prev) =>
+      prev.map((item) => {
+        if (item.id !== selectedCard.id) {
+          return item;
+        }
+
+        const next = updater(item);
+        if (!next.activeCardIterationId) {
+          return next;
+        }
+
+        const nextSnapshot = buildCardIterationSnapshot(next);
+        return {
+          ...next,
+          cardIterations: (next.cardIterations ?? []).map((iteration) =>
+            iteration.id === next.activeCardIterationId
+              ? {
+                  ...iteration,
+                  snapshot: nextSnapshot,
+                }
+              : iteration
+          ),
+        };
+      })
+    );
   };
 
   const persistGlobalLibrary = (nextTags: SettingTag[], nextCategories: string[], nextTemplates: SettingTemplate[]) => {
@@ -1916,16 +2055,73 @@ export function SettingView({
     return reasonText?.trim() || '未填写原因';
   };
 
-  const buildIterationOptionLabel = (
-    createdAt: string,
-    reasonType: IterationReasonType,
-    reasonText?: string,
-    reasonCardId?: string,
-    versionTag?: string
-  ): string => {
-    const timeLabel = new Date(createdAt).toLocaleString('zh-CN');
-    const reasonLabel = resolveIterationReasonLabel(reasonType, reasonText, reasonCardId);
-    return `${versionTag?.trim() || '未标记版本'} · ${timeLabel} · ${reasonLabel}`;
+  const buildFieldIterationPathLabel = (field: SettingCustomField, targetIterationId: string): string => {
+    const ordered = [...(field.iterations ?? [])].reverse();
+    const index = ordered.findIndex((item) => item.id === targetIterationId);
+    if (index < 0) {
+      return '原始内容';
+    }
+    const labels = ['原始内容', ...ordered.slice(0, index + 1).map((item) => item.versionTag?.trim() || '未命名迭代')];
+    return labels.join(' -> ');
+  };
+
+  const diffFieldIterationValue = (field: SettingCustomField, targetIterationId: string): { added: string[]; removed: string[] } => {
+    const ordered = [...(field.iterations ?? [])].reverse();
+    const index = ordered.findIndex((item) => item.id === targetIterationId);
+    if (index < 0) {
+      return { added: [], removed: [] };
+    }
+
+    const prevValue = index === 0 ? field.value : ordered[index - 1]?.value ?? '';
+    const nextValue = ordered[index]?.value ?? '';
+    const prevLines = prevValue.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+    const nextLines = nextValue.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+    const prevSet = new Set(prevLines);
+    const nextSet = new Set(nextLines);
+
+    return {
+      added: nextLines.filter((line) => !prevSet.has(line)).slice(0, 3),
+      removed: prevLines.filter((line) => !nextSet.has(line)).slice(0, 3),
+    };
+  };
+
+  const buildFieldIterationDiffPreview = (field: SettingCustomField, targetIterationId: string) => {
+    const ordered = [...(field.iterations ?? [])].reverse();
+    const index = ordered.findIndex((item) => item.id === targetIterationId);
+    if (index < 0) {
+      return {
+        rows: [] as Array<{ before: string; after: string; state: 'same' | 'changed' | 'added' | 'removed' }>,
+      };
+    }
+    const beforeLines = (index === 0 ? field.value : ordered[index - 1]?.value ?? '').split('\n').slice(0, 5);
+    const afterLines = (ordered[index]?.value ?? '').split('\n').slice(0, 5);
+    const maxLen = Math.max(beforeLines.length, afterLines.length);
+    const rows = Array.from({ length: maxLen }).map((_, rowIndex) => {
+      const before = beforeLines[rowIndex] ?? '';
+      const after = afterLines[rowIndex] ?? '';
+      if (!before && after) {
+        return { before, after, state: 'added' as const };
+      }
+      if (before && !after) {
+        return { before, after, state: 'removed' as const };
+      }
+      if (before !== after) {
+        return { before, after, state: 'changed' as const };
+      }
+      return { before, after, state: 'same' as const };
+    });
+    return { rows };
+  };
+
+  const buildCardIterationPathLabel = (targetIterationId: string): string => {
+    const iterationMap = new Map((selectedCard?.cardIterations ?? []).map((item) => [item.id, item]));
+    const labels: string[] = [];
+    let cursor = iterationMap.get(targetIterationId);
+    while (cursor) {
+      labels.push(resolveCardIterationTag(cursor));
+      cursor = cursor.parentIterationId ? iterationMap.get(cursor.parentIterationId) : undefined;
+    }
+    return ['原始', ...labels.reverse()].join(' -> ');
   };
 
   const resolveCardIterationTag = (iteration: SettingCardIteration): string => {
@@ -1957,35 +2153,12 @@ export function SettingView({
     return active.versionTag.trim();
   };
 
-  const getCurrentSummaryIterationMeta = (card: EditableCard): string | null => {
-    const activeId = card.activeSummaryIterationId;
-    if (!activeId) {
-      return null;
-    }
-    const active = (card.summaryIterations ?? []).find((item) => item.id === activeId);
-    if (!active) {
-      return null;
-    }
-    return resolveIterationReasonLabel(active.reasonType, active.reasonText, active.reasonCardId);
-  };
-
-  const getCurrentSummaryIterationTag = (card: EditableCard): string | null => {
-    const activeId = card.activeSummaryIterationId;
-    if (!activeId) {
-      return null;
-    }
-    const active = (card.summaryIterations ?? []).find((item) => item.id === activeId);
-    if (!active?.versionTag?.trim()) {
-      return null;
-    }
-    return active.versionTag.trim();
-  };
-
   const openFieldIterationDraft = (field: SettingCustomField, iteration?: SettingFieldIteration) => {
     const fieldId = field.id ?? '';
     if (!fieldId) {
       return;
     }
+    setActiveFieldIterationDraftFieldId(fieldId);
     setFieldIterationDrafts((prev) => ({
       ...prev,
       [fieldId]: {
@@ -2001,6 +2174,9 @@ export function SettingView({
   };
 
   const closeFieldIterationDraft = (fieldId: string) => {
+    if (activeFieldIterationDraftFieldId === fieldId) {
+      setActiveFieldIterationDraftFieldId(null);
+    }
     setFieldIterationDrafts((prev) => ({
       ...prev,
       [fieldId]: {
@@ -2077,6 +2253,7 @@ export function SettingView({
               value: nextValue,
               iterations,
               activeIterationId,
+              initialValue: item.initialValue ?? item.value,
             }
           : item
       );
@@ -2095,6 +2272,21 @@ export function SettingView({
       const targetField = card.customFields[fieldIndex];
       if (!targetField) {
         return card;
+      }
+      if (iterationId === ORIGIN_ITERATION_ID) {
+        const nextFields = card.customFields.map((item, index) =>
+          index === fieldIndex
+            ? {
+                ...item,
+                value: item.initialValue ?? item.value,
+                activeIterationId: undefined,
+              }
+            : item
+        );
+        return {
+          ...card,
+          customFields: nextFields,
+        };
       }
       const targetIteration = (targetField.iterations ?? []).find((item) => item.id === iterationId);
       if (!targetIteration) {
@@ -2116,102 +2308,85 @@ export function SettingView({
     });
   };
 
-  const openSummaryIterationDraft = (iteration?: SettingSummaryIteration) => {
-    setSummaryIterationDraft({
+  const setFieldIterationAsCurrentByFieldId = (fieldId: string, iterationId: string) => {
+    if (!selectedCard) {
+      return;
+    }
+    const fieldIndex = selectedCard.customFields.findIndex((field) => (field.id ?? '') === fieldId);
+    if (fieldIndex < 0) {
+      return;
+    }
+    setFieldIterationAsCurrent(fieldIndex, iterationId);
+  };
+
+  const saveFieldIterationByFieldId = (fieldId: string) => {
+    if (!selectedCard) {
+      return;
+    }
+    const fieldIndex = selectedCard.customFields.findIndex((field) => (field.id ?? '') === fieldId);
+    if (fieldIndex < 0) {
+      return;
+    }
+    saveFieldIteration(fieldIndex);
+  };
+
+  const startEditFieldIterationMeta = (fieldId: string, iteration: SettingFieldIteration) => {
+    setEditingFieldIterationFieldId(fieldId);
+    setEditingFieldIterationId(iteration.id);
+    setEditingFieldIterationVersionTag(iteration.versionTag ?? '');
+    setEditingFieldIterationReasonType(iteration.reasonType);
+    setEditingFieldIterationReasonText(iteration.reasonText ?? '');
+    setEditingFieldIterationReasonCardId(iteration.reasonCardId ?? '');
+  };
+
+  const cancelEditFieldIterationMeta = () => {
+    setEditingFieldIterationFieldId(null);
+    setEditingFieldIterationId(null);
+    setEditingFieldIterationVersionTag('');
+    setEditingFieldIterationReasonType('manual');
+    setEditingFieldIterationReasonText('');
+    setEditingFieldIterationReasonCardId('');
+  };
+
+  const saveFieldIterationMeta = () => {
+    if (!selectedCard || !editingFieldIterationFieldId || !editingFieldIterationId) {
+      return;
+    }
+
+    updateSelectedCard((card) => ({
+      ...card,
+      customFields: card.customFields.map((field) => {
+        if ((field.id ?? '') !== editingFieldIterationFieldId) {
+          return field;
+        }
+        return {
+          ...field,
+          iterations: (field.iterations ?? []).map((iteration) =>
+            iteration.id === editingFieldIterationId
+              ? {
+                  ...iteration,
+                  versionTag: editingFieldIterationVersionTag.trim() || undefined,
+                  reasonType: editingFieldIterationReasonType,
+                  reasonText: editingFieldIterationReasonType === 'manual' ? editingFieldIterationReasonText.trim() : undefined,
+                  reasonCardId: editingFieldIterationReasonType === 'card' ? editingFieldIterationReasonCardId : undefined,
+                }
+              : iteration
+          ),
+        };
+      }),
+    }));
+
+    cancelEditFieldIterationMeta();
+  };
+
+  const openCardIterationDraft = (iteration?: SettingCardIteration) => {
+    setCardIterationDraft({
       open: true,
-      value: iteration?.value ?? (selectedCard?.summary ?? ''),
       versionTag: iteration?.versionTag ?? '',
       reasonType: iteration?.reasonType ?? 'manual',
       reasonText: iteration?.reasonText ?? '',
       reasonCardId: iteration?.reasonCardId ?? '',
       editingIterationId: iteration?.id,
-    });
-  };
-
-  const closeSummaryIterationDraft = () => {
-    setSummaryIterationDraft({
-      open: false,
-      value: '',
-      versionTag: '',
-      reasonType: 'manual',
-      reasonText: '',
-      reasonCardId: '',
-    });
-  };
-
-  const saveSummaryIteration = () => {
-    if (!selectedCard) {
-      return;
-    }
-    const nextSummary = summaryIterationDraft.value.trim();
-    const nextVersionTag = summaryIterationDraft.versionTag.trim();
-    if (!nextSummary) {
-      setAiError('摘要迭代内容不能为空。');
-      return;
-    }
-
-    updateSelectedCard((card) => {
-      const iterations = [...(card.summaryIterations ?? [])];
-      let activeSummaryIterationId = card.activeSummaryIterationId;
-      if (summaryIterationDraft.editingIterationId) {
-        const iterationIndex = iterations.findIndex((item) => item.id === summaryIterationDraft.editingIterationId);
-        if (iterationIndex < 0) {
-          return card;
-        }
-        iterations[iterationIndex] = {
-          ...iterations[iterationIndex],
-          value: nextSummary,
-          versionTag: nextVersionTag || undefined,
-          reasonType: summaryIterationDraft.reasonType,
-          reasonText: summaryIterationDraft.reasonType === 'manual' ? summaryIterationDraft.reasonText.trim() : undefined,
-          reasonCardId: summaryIterationDraft.reasonType === 'card' ? summaryIterationDraft.reasonCardId : undefined,
-        };
-        activeSummaryIterationId = iterations[iterationIndex].id;
-      } else {
-        const nextIteration: SettingSummaryIteration = {
-          id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `summary-iter-${Date.now()}`,
-          value: nextSummary,
-          versionTag: nextVersionTag || undefined,
-          reasonType: summaryIterationDraft.reasonType,
-          reasonText: summaryIterationDraft.reasonType === 'manual' ? summaryIterationDraft.reasonText.trim() : undefined,
-          reasonCardId: summaryIterationDraft.reasonType === 'card' ? summaryIterationDraft.reasonCardId : undefined,
-          createdAt: new Date().toISOString(),
-        };
-        iterations.unshift(nextIteration);
-        activeSummaryIterationId = nextIteration.id;
-      }
-      return {
-        ...card,
-        summary: nextSummary,
-        summaryIterations: iterations,
-        activeSummaryIterationId,
-      };
-    });
-
-    closeSummaryIterationDraft();
-  };
-
-  const setSummaryIterationAsCurrent = (iterationId: string) => {
-    updateSelectedCard((card) => {
-      const targetIteration = (card.summaryIterations ?? []).find((item) => item.id === iterationId);
-      if (!targetIteration) {
-        return card;
-      }
-      return {
-        ...card,
-        summary: targetIteration.value,
-        activeSummaryIterationId: targetIteration.id,
-      };
-    });
-  };
-
-  const openCardIterationDraft = () => {
-    setCardIterationDraft({
-      open: true,
-      versionTag: '',
-      reasonType: 'manual',
-      reasonText: '',
-      reasonCardId: '',
     });
   };
 
@@ -2230,40 +2405,69 @@ export function SettingView({
       return;
     }
 
-    const snapshot = {
-      title: selectedCard.title,
-      summary: selectedCard.summary,
-      category: selectedCard.category,
-      tags: selectedCard.tags.map((tag) => ({ ...tag })),
-      customFields: selectedCard.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
-    };
+    const snapshot = buildCardIterationSnapshot(selectedCard);
 
     const nextVersionTag = cardIterationDraft.versionTag.trim();
     const reasonText = cardIterationDraft.reasonText.trim();
 
-    const hasExistingIterations = (selectedCard.cardIterations ?? []).length > 0;
-    const nextIteration: SettingCardIteration = {
-      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `card-iter-${Date.now()}`,
-      snapshot,
-      versionTag: nextVersionTag || (hasExistingIterations ? undefined : '原始'),
-      reasonType: cardIterationDraft.reasonType,
-      reasonText: cardIterationDraft.reasonType === 'manual' ? reasonText : undefined,
-      reasonCardId: cardIterationDraft.reasonType === 'card' ? cardIterationDraft.reasonCardId : undefined,
-      createdAt: new Date().toISOString(),
-    };
+    if (cardIterationDraft.editingIterationId) {
+      updateSelectedCard((card) => ({
+        ...card,
+        cardIterations: (card.cardIterations ?? []).map((iteration) =>
+          iteration.id === cardIterationDraft.editingIterationId
+            ? {
+                ...iteration,
+                versionTag: nextVersionTag || undefined,
+                reasonType: cardIterationDraft.reasonType,
+                reasonText: cardIterationDraft.reasonType === 'manual' ? reasonText : undefined,
+                reasonCardId: cardIterationDraft.reasonType === 'card' ? cardIterationDraft.reasonCardId : undefined,
+              }
+            : iteration
+        ),
+      }));
+    } else {
+      const hasExistingIterations = (selectedCard.cardIterations ?? []).length > 0;
+      const nextIteration: SettingCardIteration = {
+        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `card-iter-${Date.now()}`,
+        parentIterationId: selectedCard.activeCardIterationId,
+        snapshot,
+        versionTag: nextVersionTag || (hasExistingIterations ? undefined : '原始'),
+        reasonType: cardIterationDraft.reasonType,
+        reasonText: cardIterationDraft.reasonType === 'manual' ? reasonText : undefined,
+        reasonCardId: cardIterationDraft.reasonType === 'card' ? cardIterationDraft.reasonCardId : undefined,
+        createdAt: new Date().toISOString(),
+      };
 
-    updateSelectedCard((card) => ({
-      ...card,
-      cardIterations: [nextIteration, ...(card.cardIterations ?? [])],
-      activeCardIterationId: nextIteration.id,
-    }));
+      updateSelectedCard((card) => ({
+        ...card,
+        cardIterations: [nextIteration, ...(card.cardIterations ?? [])],
+        activeCardIterationId: nextIteration.id,
+      }));
+    }
 
     closeCardIterationDraft();
     setIsCardIterationHistoryOpen(true);
   };
 
   const setCardIterationAsCurrent = (iterationId: string) => {
+    setIsCardSwitchAnimating(true);
     updateSelectedCard((card) => {
+      if (iterationId === ORIGIN_CARD_ITERATION_ID) {
+        const origin = card.initialSnapshot;
+        if (!origin) {
+          return card;
+        }
+        return {
+          ...card,
+          title: origin.title,
+          summary: origin.summary,
+          category: origin.category,
+          tags: origin.tags.map((tag) => ({ ...tag })),
+          customFields: origin.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+          relations: (origin.relations ?? []).map((relation) => ({ ...relation })),
+          activeCardIterationId: undefined,
+        };
+      }
       const target = (card.cardIterations ?? []).find((item) => item.id === iterationId);
       if (!target) {
         return card;
@@ -2275,42 +2479,11 @@ export function SettingView({
         category: target.snapshot.category,
         tags: target.snapshot.tags.map((tag) => ({ ...tag })),
         customFields: target.snapshot.customFields.map((field) => ({ ...field, iterations: field.iterations?.map((iter) => ({ ...iter })) })),
+        relations: (target.snapshot.relations ?? []).map((relation) => ({ ...relation })),
         activeCardIterationId: target.id,
       };
     });
-  };
-
-  const startRenameCardIteration = (iteration: SettingCardIteration) => {
-    setEditingCardIterationId(iteration.id);
-    setEditingCardIterationVersionTag(resolveCardIterationTag(iteration));
-  };
-
-  const saveCardIterationRename = () => {
-    const targetId = editingCardIterationId;
-    if (!targetId) {
-      return;
-    }
-
-    const nextTag = editingCardIterationVersionTag.trim();
-    if (!nextTag) {
-      window.alert('迭代名称不能为空');
-      return;
-    }
-
-    updateSelectedCard((card) => ({
-      ...card,
-      cardIterations: (card.cardIterations ?? []).map((iteration) =>
-        iteration.id === targetId
-          ? {
-              ...iteration,
-              versionTag: nextTag,
-            }
-          : iteration
-      ),
-    }));
-
-    setEditingCardIterationId(null);
-    setEditingCardIterationVersionTag('');
+    window.setTimeout(() => setIsCardSwitchAnimating(false), 320);
   };
 
   const runAiActionByPreferredChannel = (mode: AiGuideMode, runInternal: () => void, fieldTarget?: { fieldId?: string; name: string; value: string }) => {
@@ -2677,7 +2850,6 @@ export function SettingView({
         category: card.category ?? null,
         tags: card.tags.map((tag) => ({ name: tag.name, color: tag.color })),
         customFields: card.customFields.map((field) => ({ id: field.id ?? '', name: field.name, value: field.value })),
-        summaryIterations: (card.summaryIterations ?? []).length,
       },
       context: {
         categoryOptions: categories,
@@ -3256,10 +3428,18 @@ export function SettingView({
     }
   };
 
-  const buildExternalPromptByMode = (mode: AiGuideMode) => {
+  const buildExternalPromptByMode = (
+    mode: AiGuideMode,
+    options?: {
+      polishInstruction?: string;
+      fieldTarget?: { fieldId?: string; name: string; value: string } | null;
+    }
+  ) => {
     if (!selectedCard) {
       return '';
     }
+    const polishInstruction = options?.polishInstruction ?? aiGuidePolishInstruction;
+    const targetField = options?.fieldTarget ?? externalFieldTarget;
     const payload = buildAiCardPayload(selectedCard);
     if (mode === 'describe') {
       return [
@@ -3290,25 +3470,25 @@ export function SettingView({
       return [
         '任务：按润色方案润色整卡。',
         '输出 JSON：{"patch":{"summary?":"","customFields?":[{"name":"","value":""}]}}',
-        `润色要求：${aiGuidePolishInstruction}`,
+        `润色要求：${polishInstruction}`,
         JSON.stringify(payload, null, 2),
       ].join('\n\n');
     }
     if (mode === 'fieldPolish') {
-      if (!externalFieldTarget) {
+      if (!targetField) {
         return '';
       }
       return [
         '任务：按润色方案润色单个属性。',
         '输出 JSON：{"field":{"fieldId?":"","name":"","value":""}}',
-        `润色要求：${aiGuidePolishInstruction}`,
+        `润色要求：${polishInstruction}`,
         JSON.stringify(
           {
             cardId: selectedCard.id,
             field: {
-              fieldId: externalFieldTarget.fieldId,
-              name: externalFieldTarget.name,
-              value: externalFieldTarget.value,
+              fieldId: targetField.fieldId,
+              name: targetField.name,
+              value: targetField.value,
             },
             context: payload.context,
           },
@@ -3332,15 +3512,17 @@ export function SettingView({
     mode: AiGuideMode = externalPromptMode,
     fieldTarget?: { fieldId?: string; name: string; value: string }
   ) => {
+    let polishInstructionOverride: string | undefined;
     if (mode === 'polish' || mode === 'fieldPolish') {
-      const input = await requestPolishInstruction(mode === 'fieldPolish' ? '属性（外部AI提示词）' : '整卡（外部AI提示词）');
+      const input = await requestPolishInstruction(mode === 'fieldPolish' ? '设定（外部AI提示词）' : '整卡（外部AI提示词）');
       if (!input) {
         return;
       }
+      polishInstructionOverride = input;
     }
     if (mode === 'fieldPolish') {
       if (!fieldTarget) {
-        setAiError('请先指定需要外部润色的属性。');
+        setAiError('请先指定需要外部润色的设定。');
         return;
       }
       setExternalFieldTarget(fieldTarget);
@@ -3348,7 +3530,10 @@ export function SettingView({
       setExternalFieldTarget(null);
     }
     setExternalPromptMode(mode);
-    const prompt = buildExternalPromptByMode(mode);
+    const prompt = buildExternalPromptByMode(mode, {
+      polishInstruction: polishInstructionOverride,
+      fieldTarget: mode === 'fieldPolish' ? fieldTarget : null,
+    });
     if (!prompt) {
       return;
     }
@@ -3393,7 +3578,7 @@ export function SettingView({
 
   const normalizeExternalPayload = (value: unknown): { taskType?: string; cardId?: string; result: Record<string, unknown> } => {
     if (!value || typeof value !== 'object') {
-      throw new Error('外部响应必须是 JSON 对象');
+      throw new Error('请粘贴外部 AI 返回的 JSON 对象结果');
     }
     const source = value as ExternalAiPayload;
     const resultSource = source.result && typeof source.result === 'object' ? (source.result as Record<string, unknown>) : (source as Record<string, unknown>);
@@ -3417,7 +3602,7 @@ export function SettingView({
       const schemaErrors: string[] = [];
 
       if (normalized.cardId && selectedCard && normalized.cardId !== selectedCard.id) {
-        throw new Error(`外部响应 cardId 不匹配（当前：${selectedCard.id}，响应：${normalized.cardId}）`);
+        throw new Error(`外部 AI 返回结果的 cardId 不匹配（当前：${selectedCard.id}，响应：${normalized.cardId}）`);
       }
 
       if (typeof parsed.summary === 'string' && parsed.summary.trim().length > 0) {
@@ -3492,8 +3677,8 @@ export function SettingView({
 
       throw new Error(
         normalized.taskType
-          ? `未识别到与 taskType=${normalized.taskType} 匹配的结果字段（summary/suggestions/patch/field）`
-          : '未识别到 summary、suggestions、patch 或 field 字段'
+          ? `外部 AI 结果未识别到与 taskType=${normalized.taskType} 匹配的字段（summary/suggestions/patch/field）`
+          : '外部 AI 结果未识别到 summary、suggestions、patch 或 field 字段'
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'JSON 解析失败';
@@ -4128,7 +4313,7 @@ export function SettingView({
               </button>
             </header>
 
-            <div className={styles.editorGrid}>
+            <div className={`${styles.editorGrid} ${isCardSwitchAnimating ? styles.cardSwitching : ''}`}>
               <div className={styles.fixedMetaCard}>
                 <div className={styles.aiWorkbench}>
                   <div className={styles.aiWorkbenchHeader}>
@@ -4293,16 +4478,7 @@ export function SettingView({
                 <div className={`${styles.fixedMetaField} ${styles.summarySection}`}>
                   <div className={styles.fixedTagHeader}>
                     <span className={styles.fixedMetaLabel}>摘要</span>
-                    {getCurrentSummaryIterationTag(selectedCard) ? (
-                      <span className={styles.iterationVersionTag}>{getCurrentSummaryIterationTag(selectedCard)}</span>
-                    ) : null}
-                    {getCurrentSummaryIterationMeta(selectedCard) ? (
-                      <span className={styles.currentIterationBadge}>当前来源：{getCurrentSummaryIterationMeta(selectedCard)}</span>
-                    ) : null}
                     <div className={styles.aiGuideHeaderRow}>
-                      <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => openSummaryIterationDraft()}>
-                        摘要迭代
-                      </Button>
                       <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={runAiPolishSummaryInline} disabled={aiBusy}>
                         润色摘要
                       </Button>
@@ -4318,131 +4494,7 @@ export function SettingView({
                     }}
                     placeholder="输入设定摘要"
                   />
-
-                  {summaryIterationDraft.open && (
-                    <div className={styles.iterationEditor}>
-                      <textarea
-                        className={styles.detailTextarea}
-                        rows={3}
-                        value={summaryIterationDraft.value}
-                        onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, value: event.target.value }))}
-                        placeholder="输入迭代后的摘要"
-                      />
-                      <input
-                        className={styles.detailInput}
-                        value={summaryIterationDraft.versionTag}
-                        onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, versionTag: event.target.value }))}
-                        placeholder="版本标签，例如：v1 / v2 / 终稿"
-                      />
-                      <div className={styles.fieldRelationAdd}>
-                        <select
-                          className={styles.relationSelect}
-                          value={summaryIterationDraft.reasonType}
-                          onChange={(event) =>
-                            setSummaryIterationDraft((prev) => ({
-                              ...prev,
-                              reasonType: event.target.value === 'card' ? 'card' : 'manual',
-                            }))
-                          }
-                        >
-                          <option value="manual">手动填写原因</option>
-                          <option value="card">选择关联卡作为原因</option>
-                        </select>
-                        {summaryIterationDraft.reasonType === 'card' ? (
-                          <select
-                            className={styles.relationSelect}
-                            value={summaryIterationDraft.reasonCardId}
-                            onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, reasonCardId: event.target.value }))}
-                          >
-                            <option value="">选择原因卡片</option>
-                            {cards
-                              .filter((card) => card.id !== selectedCard.id)
-                              .map((card) => (
-                                <option key={`summary-reason-${card.id}`} value={card.id}>
-                                  {card.title}
-                                </option>
-                              ))}
-                          </select>
-                        ) : (
-                          <input
-                            className={styles.detailInput}
-                            value={summaryIterationDraft.reasonText}
-                            onChange={(event) => setSummaryIterationDraft((prev) => ({ ...prev, reasonText: event.target.value }))}
-                            placeholder="例如：主角失去同伴后价值观转变"
-                          />
-                        )}
-                      </div>
-                      <div className={styles.managerActionsRow}>
-                        <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={closeSummaryIterationDraft}>
-                          取消
-                        </Button>
-                        <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={saveSummaryIteration}>
-                          保存摘要迭代
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {(selectedCard.summaryIterations ?? []).length > 0 && (
-                    <button
-                      type="button"
-                      className={styles.iterationDrawerToggle}
-                      onClick={() => setSummaryIterationDrawerOpen((prev) => !prev)}
-                    >
-                      <span>{summaryIterationDrawerOpen ? '收起' : '展开'}摘要历史 ({(selectedCard.summaryIterations ?? []).length})</span>
-                      <span className={styles.toggleArrow}>{summaryIterationDrawerOpen ? '▲' : '▼'}</span>
-                    </button>
-                  )}
-
-                  {summaryIterationDrawerOpen && (selectedCard.summaryIterations ?? []).length > 0 && (
-                    <>
-                      <div className={styles.iterationSwitcherRow}>
-                        <span className={styles.iterationSwitcherLabel}>当前摘要版本</span>
-                        <select
-                          className={styles.iterationSwitcherSelect}
-                          value={selectedCard.activeSummaryIterationId ?? ''}
-                          onChange={(event) => {
-                            if (event.target.value) {
-                              setSummaryIterationAsCurrent(event.target.value);
-                            }
-                          }}
-                        >
-                          {(selectedCard.summaryIterations ?? []).map((iteration) => (
-                            <option key={`summary-switch-${iteration.id}`} value={iteration.id}>
-                              {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className={styles.iterationList}>
-                        {(selectedCard.summaryIterations ?? []).map((iteration) => (
-                          <div key={iteration.id} className={styles.iterationItem}>
-                            {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
-                            <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                            <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
-                            <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}>
-                              {resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}
-                            </span>
-                            <div className={styles.managerActionsRow}>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className={styles.inlineActionButton}
-                                onClick={() => setSummaryIterationAsCurrent(iteration.id)}
-                                disabled={selectedCard.activeSummaryIterationId === iteration.id}
-                              >
-                                {selectedCard.activeSummaryIterationId === iteration.id ? '当前版本' : '设为当前'}
-                              </Button>
-                              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openSummaryIterationDraft(iteration)}>
-                                修改原因
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  <p className={styles.aiHint}>摘要随整卡迭代数据源切换，不单独维护摘要迭代历史。</p>
                 </div>
 
                 <div className={`${styles.fixedMetaField} ${styles.dependencySection}`}>
@@ -4558,20 +4610,26 @@ export function SettingView({
                               <button className={styles.deleteFieldBtn} onClick={() => openFieldIterationDraft(field)}>
                                 迭代
                               </button>
-                              <button className={styles.deleteFieldBtn} onClick={() => runAiPolishFieldInline(field)}>
-                                润色
+                              <button className={styles.deleteFieldBtn} onClick={() => setFieldIterationHistoryFieldId(fieldId)}>
+                                历史
                               </button>
                               <button
                                 className={styles.deleteFieldBtn}
                                 onClick={() =>
-                                  void handleOpenExternalAi('fieldPolish', {
-                                    fieldId: field.id,
-                                    name: field.name,
-                                    value: field.value,
-                                  })
+                                  runAiActionByPreferredChannel(
+                                    'fieldPolish',
+                                    () => {
+                                      void runAiPolishFieldInline(field);
+                                    },
+                                    {
+                                      fieldId: field.id,
+                                      name: field.name,
+                                      value: field.value,
+                                    }
+                                  )
                                 }
                               >
-                                外部润色
+                                润色
                               </button>
                               <button className={styles.deleteFieldBtn} onClick={() => handleDeleteCustomField(index)}>
                                 删除
@@ -4585,204 +4643,10 @@ export function SettingView({
                         rows={4}
                         value={field.value}
                         onChange={(event) => handleUpdateCustomField(index, { value: event.target.value })}
-                        placeholder="属性值"
+                        placeholder="设定内容"
                       />
 
-                      {(field.iterations ?? []).length > 0 && (
-                        <button
-                          type="button"
-                          className={styles.iterationDrawerToggle}
-                          onClick={() => setFieldIterationDrawersOpen((prev) => ({ ...prev, [fieldId]: !prev[fieldId] }))}
-                        >
-                          <span>{fieldIterationDrawersOpen[fieldId] ? '收起' : '展开'}属性历史 ({(field.iterations ?? []).length})</span>
-                          <span className={styles.toggleArrow}>{fieldIterationDrawersOpen[fieldId] ? '▲' : '▼'}</span>
-                        </button>
-                      )}
 
-                      {fieldIterationDrawersOpen[fieldId] && (field.iterations ?? []).length > 0 && (
-                        <>
-                          <div className={styles.iterationSwitcherRow}>
-                            <span className={styles.iterationSwitcherLabel}>当前属性版本</span>
-                            <select
-                              className={styles.iterationSwitcherSelect}
-                              value={field.activeIterationId ?? ''}
-                              onChange={(event) => {
-                                if (event.target.value) {
-                                  setFieldIterationAsCurrent(index, event.target.value);
-                                }
-                              }}
-                            >
-                              {(field.iterations ?? []).map((iteration) => (
-                                <option key={`field-switch-${fieldId}-${iteration.id}`} value={iteration.id}>
-                                  {buildIterationOptionLabel(iteration.createdAt, iteration.reasonType, iteration.reasonText, iteration.reasonCardId, iteration.versionTag)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className={styles.iterationList}>
-                            {(field.iterations ?? []).map((iteration) => (
-                              <div key={iteration.id} className={styles.iterationItem}>
-                                {iteration.versionTag ? <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag}</span> : null}
-                                <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                                <p className={styles.iterationValue} title={iteration.value}>{iteration.value}</p>
-                                <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}>
-                                  {resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}
-                                </span>
-                                <div className={styles.managerActionsRow}>
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className={styles.inlineActionButton}
-                                    onClick={() => setFieldIterationAsCurrent(index, iteration.id)}
-                                    disabled={field.activeIterationId === iteration.id}
-                                  >
-                                    {field.activeIterationId === iteration.id ? '当前版本' : '设为当前'}
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => openFieldIterationDraft(field, iteration)}>
-                                    修改原因
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {(fieldIterationDrafts[fieldId]?.open ?? false) && (
-                        <div className={styles.iterationEditor}>
-                          <textarea
-                            className={styles.detailTextarea}
-                            rows={3}
-                            value={fieldIterationDrafts[fieldId]?.value ?? field.value}
-                            onChange={(event) =>
-                              setFieldIterationDrafts((prev) => ({
-                                ...prev,
-                                [fieldId]: {
-                                  ...(prev[fieldId] ?? {
-                                    open: true,
-                                    value: field.value,
-                                    versionTag: '',
-                                    reasonType: 'manual',
-                                    reasonText: '',
-                                    reasonCardId: '',
-                                  }),
-                                  value: event.target.value,
-                                },
-                              }))
-                            }
-                            placeholder="输入该属性的新版本内容"
-                          />
-                          <input
-                            className={styles.detailInput}
-                            value={fieldIterationDrafts[fieldId]?.versionTag ?? ''}
-                            onChange={(event) =>
-                              setFieldIterationDrafts((prev) => ({
-                                ...prev,
-                                [fieldId]: {
-                                  ...(prev[fieldId] ?? {
-                                    open: true,
-                                    value: field.value,
-                                    versionTag: '',
-                                    reasonType: 'manual',
-                                    reasonText: '',
-                                    reasonCardId: '',
-                                  }),
-                                  versionTag: event.target.value,
-                                },
-                              }))
-                            }
-                            placeholder="版本标签，例如：v1 / v2 / 终稿"
-                          />
-                          <div className={styles.fieldRelationAdd}>
-                            <select
-                              className={styles.relationSelect}
-                              value={fieldIterationDrafts[fieldId]?.reasonType ?? 'manual'}
-                              onChange={(event) =>
-                                setFieldIterationDrafts((prev) => ({
-                                  ...prev,
-                                  [fieldId]: {
-                                    ...(prev[fieldId] ?? {
-                                      open: true,
-                                      value: field.value,
-                                      versionTag: '',
-                                      reasonType: 'manual',
-                                      reasonText: '',
-                                      reasonCardId: '',
-                                    }),
-                                    reasonType: event.target.value === 'card' ? 'card' : 'manual',
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="manual">手动填写原因</option>
-                              <option value="card">选择关联卡作为原因</option>
-                            </select>
-                            {(fieldIterationDrafts[fieldId]?.reasonType ?? 'manual') === 'card' ? (
-                              <select
-                                className={styles.relationSelect}
-                                value={fieldIterationDrafts[fieldId]?.reasonCardId ?? ''}
-                                onChange={(event) =>
-                                  setFieldIterationDrafts((prev) => ({
-                                    ...prev,
-                                    [fieldId]: {
-                                      ...(prev[fieldId] ?? {
-                                        open: true,
-                                        value: field.value,
-                                        versionTag: '',
-                                        reasonType: 'card',
-                                        reasonText: '',
-                                        reasonCardId: '',
-                                      }),
-                                      reasonCardId: event.target.value,
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="">选择原因卡片</option>
-                                {cards
-                                  .filter((card) => card.id !== selectedCard.id)
-                                  .map((card) => (
-                                    <option key={`field-reason-${fieldId}-${card.id}`} value={card.id}>
-                                      {card.title}
-                                    </option>
-                                  ))}
-                              </select>
-                            ) : (
-                              <input
-                                className={styles.detailInput}
-                                value={fieldIterationDrafts[fieldId]?.reasonText ?? ''}
-                                onChange={(event) =>
-                                  setFieldIterationDrafts((prev) => ({
-                                    ...prev,
-                                    [fieldId]: {
-                                      ...(prev[fieldId] ?? {
-                                        open: true,
-                                        value: field.value,
-                                        versionTag: '',
-                                        reasonType: 'manual',
-                                        reasonText: '',
-                                        reasonCardId: '',
-                                      }),
-                                      reasonText: event.target.value,
-                                    },
-                                  }))
-                                }
-                                placeholder="填写迭代原因"
-                              />
-                            )}
-                          </div>
-                          <div className={styles.managerActionsRow}>
-                            <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => closeFieldIterationDraft(fieldId)}>
-                              取消
-                            </Button>
-                            <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => saveFieldIteration(index)}>
-                              保存设定迭代
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                       
                       <div className={styles.fieldRelationSection}>
                         <button
                           className={styles.fieldRelationToggle}
@@ -5102,7 +4966,7 @@ export function SettingView({
 
             <div className={styles.managerActionsRow}>
               <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => void handleOpenExternalAi('describe')}>
-                打开外部辅助
+                打开外部 AI 中转
               </Button>
               <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setIsAiGuideOpen(false)}>
                 关闭
@@ -5114,7 +4978,7 @@ export function SettingView({
                 onClick={() => runAiActionByPreferredChannel('describe', () => void runAiGuideFlow('describe'))}
                 disabled={aiBusy}
               >
-                {aiBusy ? '执行中...' : preferredAiChannel === 'external' ? '使用外部辅助建卡' : '使用内置辅助建卡'}
+                {aiBusy ? '执行中...' : preferredAiChannel === 'external' ? '外部 AI 中转生成' : '内置 AI 一键生成'}
               </Button>
             </div>
           </div>
@@ -5122,7 +4986,7 @@ export function SettingView({
       )}
 
       {cardIterationDraft.open && selectedCard && (
-        <div className={styles.managerOverlay} role="presentation" onClick={closeCardIterationDraft}>
+        <div className={`${styles.managerOverlay} ${styles.topMostOverlay}`} role="presentation" onClick={closeCardIterationDraft}>
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className={styles.managerHeader}>
               <h3>创建整卡迭代</h3>
@@ -5194,6 +5058,28 @@ export function SettingView({
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className={styles.managerHeader}>
               <h3>{polishPromptTarget}润色方案</h3>
+            </div>
+            <div className={styles.polishChannelNotice}>
+              <div>
+                <p className={styles.polishChannelTitle}>当前润色渠道：{preferredAiChannel === 'external' ? '外部 AI 中转' : '内置 AI 一键'}</p>
+                <p className={styles.aiHint}>可在这里直接切换。确认后将按当前渠道继续执行润色。</p>
+              </div>
+              <div className={styles.aiChannelSwitchGroup}>
+                <button
+                  type="button"
+                  className={preferredAiChannel === 'internal' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                  onClick={() => setPreferredAiChannel('internal')}
+                >
+                  内置 AI
+                </button>
+                <button
+                  type="button"
+                  className={preferredAiChannel === 'external' ? styles.aiChannelSwitchActive : styles.aiChannelSwitchButton}
+                  onClick={() => setPreferredAiChannel('external')}
+                >
+                  外部 AI
+                </button>
+              </div>
             </div>
             <p className={styles.aiHint}>可多行输入。确认后会记住最近方案，方便下次复用。</p>
 
@@ -5272,9 +5158,9 @@ export function SettingView({
         <div className={styles.managerOverlay} role="presentation" onClick={() => setIsExternalAiOpen(false)}>
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className={styles.managerHeader}>
-              <h3>外部AI辅助</h3>
+              <h3>外部 AI 中转工作台</h3>
             </div>
-            <p className={styles.aiHint}>复制提示词到外部模型网页，拿回 JSON 后粘贴到下方应用。</p>
+            <p className={styles.aiHint}>流程：先复制提示词给外部 AI -&gt; 再把外部 AI 的 JSON 结果粘贴回来，系统会生成与内置 AI 一键相同的预览与应用流程。</p>
             <div className={styles.aiGuideHeaderRow}>
               <Button
                 size="sm"
@@ -5285,7 +5171,7 @@ export function SettingView({
                   setExternalPrompt(buildExternalPromptByMode('describe'));
                 }}
               >
-                描述到摘要+属性
+                描述到摘要+设定
               </Button>
               <Button
                 size="sm"
@@ -5296,7 +5182,7 @@ export function SettingView({
                   setExternalPrompt(buildExternalPromptByMode('summaryToFields'));
                 }}
               >
-                摘要到属性
+                摘要到设定
               </Button>
               <Button
                 size="sm"
@@ -5330,7 +5216,7 @@ export function SettingView({
                   setExternalPrompt(buildExternalPromptByMode('fieldPolish'));
                 }}
               >
-                属性润色
+                设定润色
               </Button>
               <Button
                 size="sm"
@@ -5341,7 +5227,7 @@ export function SettingView({
                   setExternalPrompt(buildExternalPromptByMode('fieldsToSummary'));
                 }}
               >
-                属性到摘要
+                设定到摘要
               </Button>
               <Button
                 size="sm"
@@ -5349,12 +5235,12 @@ export function SettingView({
                 className={styles.inlineActionButton}
                 onClick={() => setExternalPrompt(buildExternalPromptByMode(externalPromptMode))}
               >
-                刷新提示词
+                重新生成提示词
               </Button>
             </div>
             <div className={styles.externalAiActions}>
               <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={handleCopyExternalPrompt}>
-                复制提示词
+                复制给外部 AI
               </Button>
               <Button
                 size="sm"
@@ -5365,11 +5251,11 @@ export function SettingView({
                   window.open(matched?.webUrl ?? 'https://chatgpt.com/', '_blank', 'noopener,noreferrer');
                 }}
               >
-                打开模型网页
+                打开外部 AI 网页
               </Button>
             </div>
             {externalPromptMode === 'fieldPolish' && externalFieldTarget ? (
-              <p className={styles.aiHint}>当前属性目标：{externalFieldTarget.name}</p>
+              <p className={styles.aiHint}>当前设定目标：{externalFieldTarget.name}</p>
             ) : null}
             {aiContextNotice ? <p className={styles.aiHint}>{aiContextNotice}</p> : null}
 
@@ -5384,7 +5270,7 @@ export function SettingView({
                 setExternalResponseError(null);
                 setExternalResponseSchemaErrors([]);
               }}
-              placeholder="粘贴外部AI返回的 JSON"
+              placeholder="粘贴外部 AI 返回的 JSON 结果"
             />
             {externalResponseError && <p className={styles.aiErrorText}>{externalResponseError}</p>}
             {externalResponseSchemaErrors.length > 0 && (
@@ -5404,7 +5290,7 @@ export function SettingView({
                 关闭
               </Button>
               <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={handleApplyExternalResponse}>
-                解析并预览应用
+                解析结果并进入应用预览
               </Button>
             </div>
           </div>
@@ -5570,6 +5456,320 @@ export function SettingView({
         </div>
       )}
 
+      {activeFieldIterationDraftFieldId && selectedCard && selectedFieldDraftTarget && (
+        <div className={`${styles.managerOverlay} ${styles.topMostOverlay}`} role="presentation" onClick={() => closeFieldIterationDraft(activeFieldIterationDraftFieldId)}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>设定迭代编辑 · {selectedFieldDraftTarget.name || '未命名设定'}</h3>
+            </div>
+            <div className={styles.iterationEditor}>
+              <textarea
+                className={styles.detailTextarea}
+                rows={4}
+                value={fieldIterationDrafts[activeFieldIterationDraftFieldId]?.value ?? selectedFieldDraftTarget.value}
+                onChange={(event) =>
+                  setFieldIterationDrafts((prev) => ({
+                    ...prev,
+                    [activeFieldIterationDraftFieldId]: {
+                      ...(prev[activeFieldIterationDraftFieldId] ?? {
+                        open: true,
+                        value: selectedFieldDraftTarget.value,
+                        versionTag: '',
+                        reasonType: 'manual',
+                        reasonText: '',
+                        reasonCardId: '',
+                      }),
+                      value: event.target.value,
+                    },
+                  }))
+                }
+                placeholder="输入该设定的新版本内容"
+              />
+              <input
+                className={styles.detailInput}
+                value={fieldIterationDrafts[activeFieldIterationDraftFieldId]?.versionTag ?? ''}
+                onChange={(event) =>
+                  setFieldIterationDrafts((prev) => ({
+                    ...prev,
+                    [activeFieldIterationDraftFieldId]: {
+                      ...(prev[activeFieldIterationDraftFieldId] ?? {
+                        open: true,
+                        value: selectedFieldDraftTarget.value,
+                        versionTag: '',
+                        reasonType: 'manual',
+                        reasonText: '',
+                        reasonCardId: '',
+                      }),
+                      versionTag: event.target.value,
+                    },
+                  }))
+                }
+                placeholder="版本标签，例如：v1 / v2 / 终稿"
+              />
+              <div className={styles.fieldRelationAdd}>
+                <select
+                  className={styles.relationSelect}
+                  value={fieldIterationDrafts[activeFieldIterationDraftFieldId]?.reasonType ?? 'manual'}
+                  onChange={(event) =>
+                    setFieldIterationDrafts((prev) => ({
+                      ...prev,
+                      [activeFieldIterationDraftFieldId]: {
+                        ...(prev[activeFieldIterationDraftFieldId] ?? {
+                          open: true,
+                          value: selectedFieldDraftTarget.value,
+                          versionTag: '',
+                          reasonType: 'manual',
+                          reasonText: '',
+                          reasonCardId: '',
+                        }),
+                        reasonType: event.target.value === 'card' ? 'card' : 'manual',
+                      },
+                    }))
+                  }
+                >
+                  <option value="manual">手动填写原因</option>
+                  <option value="card">选择关联卡作为原因</option>
+                </select>
+                {(fieldIterationDrafts[activeFieldIterationDraftFieldId]?.reasonType ?? 'manual') === 'card' ? (
+                  <select
+                    className={styles.relationSelect}
+                    value={fieldIterationDrafts[activeFieldIterationDraftFieldId]?.reasonCardId ?? ''}
+                    onChange={(event) =>
+                      setFieldIterationDrafts((prev) => ({
+                        ...prev,
+                        [activeFieldIterationDraftFieldId]: {
+                          ...(prev[activeFieldIterationDraftFieldId] ?? {
+                            open: true,
+                            value: selectedFieldDraftTarget.value,
+                            versionTag: '',
+                            reasonType: 'card',
+                            reasonText: '',
+                            reasonCardId: '',
+                          }),
+                          reasonCardId: event.target.value,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">选择原因卡片</option>
+                    {cards
+                      .filter((card) => card.id !== selectedCard.id)
+                      .map((card) => (
+                        <option key={`field-modal-reason-${activeFieldIterationDraftFieldId}-${card.id}`} value={card.id}>
+                          {card.title}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <input
+                    className={styles.detailInput}
+                    value={fieldIterationDrafts[activeFieldIterationDraftFieldId]?.reasonText ?? ''}
+                    onChange={(event) =>
+                      setFieldIterationDrafts((prev) => ({
+                        ...prev,
+                        [activeFieldIterationDraftFieldId]: {
+                          ...(prev[activeFieldIterationDraftFieldId] ?? {
+                            open: true,
+                            value: selectedFieldDraftTarget.value,
+                            versionTag: '',
+                            reasonType: 'manual',
+                            reasonText: '',
+                            reasonCardId: '',
+                          }),
+                          reasonText: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="填写迭代原因"
+                  />
+                )}
+              </div>
+              <div className={styles.managerActionsRow}>
+                <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => closeFieldIterationDraft(activeFieldIterationDraftFieldId)}>
+                  取消
+                </Button>
+                <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => saveFieldIterationByFieldId(activeFieldIterationDraftFieldId)}>
+                  保存设定迭代
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fieldIterationHistoryFieldId && selectedCard && selectedFieldIterationTarget && (
+        <div className={styles.managerOverlay} role="presentation" onClick={() => setFieldIterationHistoryFieldId(null)}>
+          <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.managerHeader}>
+              <h3>设定迭代历史 · {selectedFieldIterationTarget.name || '未命名设定'}</h3>
+            </div>
+            <p className={styles.aiHint}>从当前版本创建迭代，可直接切换当前版本，并修改原因或重命名。</p>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => openFieldIterationDraft(selectedFieldIterationTarget)}>
+                创建设定迭代
+              </Button>
+            </div>
+            <div className={styles.cardEvolutionTimeline}>
+              <button
+                type="button"
+                className={`${styles.cardEvolutionNode} ${!selectedFieldIterationTarget.activeIterationId ? styles.cardEvolutionNodeActive : ''}`}
+                onClick={() => setFieldIterationAsCurrentByFieldId(fieldIterationHistoryFieldId, ORIGIN_ITERATION_ID)}
+              >
+                原始
+              </button>
+              {[...(selectedFieldIterationTarget.iterations ?? [])].reverse().map((iteration) => (
+                <button
+                  key={`field-timeline-${iteration.id}`}
+                  type="button"
+                  className={`${styles.cardEvolutionNode} ${selectedFieldIterationTarget.activeIterationId === iteration.id ? styles.cardEvolutionNodeActive : ''}`}
+                  onClick={() => setFieldIterationAsCurrentByFieldId(fieldIterationHistoryFieldId, iteration.id)}
+                  title={buildFieldIterationPathLabel(selectedFieldIterationTarget, iteration.id)}
+                >
+                  {iteration.versionTag?.trim() || '未命名迭代'}
+                </button>
+              ))}
+            </div>
+            <div className={styles.iterationList}>
+              {(selectedFieldIterationTarget.iterations ?? []).length > 0 ? (
+                (selectedFieldIterationTarget.iterations ?? []).map((iteration) => {
+                  const diff = diffFieldIterationValue(selectedFieldIterationTarget, iteration.id);
+                  const preview = buildFieldIterationDiffPreview(selectedFieldIterationTarget, iteration.id);
+                  const isEditing = editingFieldIterationFieldId === fieldIterationHistoryFieldId && editingFieldIterationId === iteration.id;
+                  return (
+                    <div key={`field-iter-modal-${iteration.id}`} className={styles.iterationItem}>
+                      <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
+                      <p className={styles.aiHint}>迭代路径：{buildFieldIterationPathLabel(selectedFieldIterationTarget, iteration.id)}</p>
+                      {isEditing ? (
+                        <div className={styles.iterationDraftSection}>
+                          <div className={styles.cardIterationRenameRow}>
+                            <input
+                              className={styles.detailInput}
+                              value={editingFieldIterationVersionTag}
+                              onChange={(event) => setEditingFieldIterationVersionTag(event.target.value)}
+                              placeholder="迭代标签"
+                            />
+                            <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={saveFieldIterationMeta}>
+                              保存
+                            </Button>
+                            <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={cancelEditFieldIterationMeta}>
+                              取消
+                            </Button>
+                          </div>
+                          <div className={styles.fieldRelationAdd}>
+                            <select
+                              className={styles.relationSelect}
+                              value={editingFieldIterationReasonType}
+                              onChange={(event) => setEditingFieldIterationReasonType(event.target.value === 'card' ? 'card' : 'manual')}
+                            >
+                              <option value="manual">手动填写原因</option>
+                              <option value="card">选择关联卡作为原因</option>
+                            </select>
+                            {editingFieldIterationReasonType === 'card' ? (
+                              <select
+                                className={styles.relationSelect}
+                                value={editingFieldIterationReasonCardId}
+                                onChange={(event) => setEditingFieldIterationReasonCardId(event.target.value)}
+                              >
+                                <option value="">选择原因卡片</option>
+                                {cards
+                                  .filter((card) => card.id !== selectedCard.id)
+                                  .map((card) => (
+                                    <option key={`field-iter-reason-${card.id}`} value={card.id}>
+                                      {card.title}
+                                    </option>
+                                  ))}
+                              </select>
+                            ) : (
+                              <input
+                                className={styles.detailInput}
+                                value={editingFieldIterationReasonText}
+                                onChange={(event) => setEditingFieldIterationReasonText(event.target.value)}
+                                placeholder="填写迭代原因"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{iteration.versionTag?.trim() || '未命名迭代'}</span>
+                          <div className={styles.fieldDiffPanel}>
+                            <div className={styles.fieldDiffColumn}>
+                              <span className={styles.fieldDiffTitle}>上一版本</span>
+                              {preview.rows.length > 0 ? (
+                                preview.rows.map((row, lineIndex) => (
+                                  <p key={`field-modal-prev-${iteration.id}-${lineIndex}`} className={row.state === 'removed' || row.state === 'changed' ? styles.fieldDiffLineRemoved : styles.fieldDiffLineMuted}>
+                                    {row.before || '（空）'}
+                                  </p>
+                                ))
+                              ) : (
+                                <p className={styles.fieldDiffLineMuted}>（空）</p>
+                              )}
+                            </div>
+                            <div className={styles.fieldDiffColumn}>
+                              <span className={styles.fieldDiffTitle}>本版本</span>
+                              {preview.rows.length > 0 ? (
+                                preview.rows.map((row, lineIndex) => (
+                                  <p
+                                    key={`field-modal-next-${iteration.id}-${lineIndex}`}
+                                    className={
+                                      row.state === 'added'
+                                        ? styles.fieldDiffLineAdded
+                                        : row.state === 'changed'
+                                          ? styles.fieldDiffLineChanged
+                                          : styles.fieldDiffLineMuted
+                                    }
+                                  >
+                                    {row.after || '（空）'}
+                                  </p>
+                                ))
+                              ) : (
+                                <p className={styles.fieldDiffLineMuted}>（空）</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className={styles.cardIterationPreviewGrid}>
+                            {diff.added.length > 0 ? <p><strong>+新增：</strong>{diff.added.join('；')}</p> : null}
+                            {diff.removed.length > 0 ? <p><strong>-移除：</strong>{diff.removed.join('；')}</p> : null}
+                            {diff.added.length === 0 && diff.removed.length === 0 ? <p><strong>Diff：</strong>与上一版无文本差异</p> : null}
+                          </div>
+                          <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}>
+                            {resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId)}
+                          </span>
+                          <div className={styles.managerActionsRow}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className={styles.inlineActionButton}
+                              onClick={() => setFieldIterationAsCurrentByFieldId(fieldIterationHistoryFieldId, iteration.id)}
+                              disabled={selectedFieldIterationTarget.activeIterationId === iteration.id}
+                            >
+                              {selectedFieldIterationTarget.activeIterationId === iteration.id ? '当前版本' : '设为当前'}
+                            </Button>
+                            <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => startEditFieldIterationMeta(fieldIterationHistoryFieldId, iteration)}>
+                              修改原因
+                            </Button>
+                            <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => startEditFieldIterationMeta(fieldIterationHistoryFieldId, iteration)}>
+                              重命名
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className={styles.emptyState}>暂无设定迭代，当前默认为“原始”。</p>
+              )}
+            </div>
+            <div className={styles.managerActionsRow}>
+              <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => setFieldIterationHistoryFieldId(null)}>
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isCardIterationHistoryOpen && selectedCard && (
         <div className={styles.managerOverlay} role="presentation" onClick={() => setIsCardIterationHistoryOpen(false)}>
           <div className={styles.managerCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -5578,73 +5778,93 @@ export function SettingView({
             </div>
             <p className={styles.aiHint}>查看当前迭代与历史快照，可重命名并切换当前版本。</p>
             <div className={styles.managerActionsRow}>
-              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={openCardIterationDraft}>
-                创建整卡迭代
+              <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={() => openCardIterationDraft()}>
+                从当前版本创建迭代
               </Button>
             </div>
+            {(selectedCard.cardIterations ?? []).length > 0 && (
+              <div className={styles.cardEvolutionTimeline}>
+                <button
+                  type="button"
+                  className={`${styles.cardEvolutionNode} ${!selectedCard.activeCardIterationId ? styles.cardEvolutionNodeActive : ''}`}
+                  onClick={() => setCardIterationAsCurrent(ORIGIN_CARD_ITERATION_ID)}
+                  title="原始底稿"
+                >
+                  原始
+                </button>
+                {[...(selectedCard.cardIterations ?? [])].reverse().map((iteration) => (
+                  <button
+                    key={`timeline-${iteration.id}`}
+                    type="button"
+                    className={`${styles.cardEvolutionNode} ${selectedCard.activeCardIterationId === iteration.id ? styles.cardEvolutionNodeActive : ''}`}
+                    onClick={() => setCardIterationAsCurrent(iteration.id)}
+                    title={buildCardIterationPathLabel(iteration.id)}
+                  >
+                    {resolveCardIterationTag(iteration)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={styles.iterationList}>
               {(selectedCard.cardIterations ?? []).length > 0 ? (
-                (selectedCard.cardIterations ?? []).map((iteration) => {
-                  const reasonLabel = resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId);
+                (() => {
+                  const entries = [
+                    {
+                      id: ORIGIN_CARD_ITERATION_ID,
+                      createdAt: '原始底稿',
+                      path: '进化路径：原始',
+                      tag: '原始',
+                      reason: '初始底稿',
+                      snapshot: selectedCard.initialSnapshot,
+                      rawIteration: null as SettingCardIteration | null,
+                    },
+                    ...(selectedCard.cardIterations ?? []).map((iteration) => ({
+                      id: iteration.id,
+                      createdAt: new Date(iteration.createdAt).toLocaleString('zh-CN'),
+                      path: `进化路径：${buildCardIterationPathLabel(iteration.id)}`,
+                      tag: resolveCardIterationTag(iteration),
+                      reason: resolveIterationReasonLabel(iteration.reasonType, iteration.reasonText, iteration.reasonCardId),
+                      snapshot: iteration.snapshot,
+                      rawIteration: iteration,
+                    })),
+                  ];
+                  const selectedEntry = entries.find((entry) => entry.id === (selectedCard.activeCardIterationId ?? ORIGIN_CARD_ITERATION_ID));
+                  if (!selectedEntry?.snapshot) {
+                    return null;
+                  }
+                  const iteration = selectedEntry.rawIteration;
                   return (
-                    <div key={iteration.id} className={`${styles.iterationItem} ${styles.cardIterationItem}`}>
-                      <p className={styles.templatePickMeta}>{new Date(iteration.createdAt).toLocaleString('zh-CN')}</p>
-                      {editingCardIterationId === iteration.id ? (
-                        <div className={styles.cardIterationRenameRow}>
-                          <input
-                            className={styles.detailInput}
-                            value={editingCardIterationVersionTag}
-                            onChange={(event) => setEditingCardIterationVersionTag(event.target.value)}
-                            placeholder="输入迭代名称"
-                          />
-                          <Button size="sm" variant="secondary" className={styles.inlineActionButton} onClick={saveCardIterationRename}>
-                            保存
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className={styles.inlineActionButton}
-                            onClick={() => {
-                              setEditingCardIterationId(null);
-                              setEditingCardIterationVersionTag('');
-                            }}
-                          >
-                            取消
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{resolveCardIterationTag(iteration)}</span>
-                      )}
+                    <div key={selectedEntry.id} className={`${styles.iterationItem} ${styles.cardIterationItem}`}>
+                      <p className={styles.templatePickMeta}>{selectedEntry.createdAt}</p>
+                      <p className={styles.aiHint}>{selectedEntry.path}</p>
+                      <span className={`${styles.iterationVersionTag} ${styles.iterationVersionTagCorner}`}>{selectedEntry.tag}</span>
                       <div className={styles.cardIterationPreviewGrid}>
-                        <p><strong>名称：</strong>{iteration.snapshot.title || '（空）'}</p>
-                        <p><strong>分类：</strong>{iteration.snapshot.category || '（空）'}</p>
-                        <p><strong>摘要：</strong>{iteration.snapshot.summary || '（空）'}</p>
-                        {iteration.snapshot.customFields.length > 0 ? (
-                          iteration.snapshot.customFields.map((field) => (
-                            <p key={`iter-preview-${iteration.id}-${field.id ?? field.name}`}><strong>{field.name || '未命名设定'}：</strong>{field.value || '（空）'}</p>
+                        <p><strong>名称：</strong>{selectedEntry.snapshot.title || '（空）'}</p>
+                        <p><strong>分类：</strong>{selectedEntry.snapshot.category || '（空）'}</p>
+                        <p><strong>摘要：</strong>{selectedEntry.snapshot.summary || '（空）'}</p>
+                        {selectedEntry.snapshot.customFields.length > 0 ? (
+                          selectedEntry.snapshot.customFields.map((field) => (
+                            <p key={`iter-preview-${selectedEntry.id}-${field.id ?? field.name}`}><strong>{field.name || '未命名设定'}：</strong>{field.value || '（空）'}</p>
                           ))
                         ) : (
                           <p><strong>设定：</strong>无设定</p>
                         )}
                       </div>
-                      <span className={`${styles.tagChip} ${styles.iterationReasonChip}`} title={reasonLabel}>{reasonLabel}</span>
-                      <div className={styles.managerActionsRow}>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className={styles.inlineActionButton}
-                          onClick={() => setCardIterationAsCurrent(iteration.id)}
-                          disabled={selectedCard.activeCardIterationId === iteration.id}
+                      {iteration ? (
+                        <button
+                          type="button"
+                          className={`${styles.tagChip} ${styles.iterationReasonChip} ${styles.iterationReasonButton}`}
+                          title={selectedEntry.reason}
+                          onClick={() => openCardIterationDraft(iteration)}
                         >
-                          {selectedCard.activeCardIterationId === iteration.id ? '当前版本' : '设为当前'}
-                        </Button>
-                        <Button size="sm" variant="ghost" className={styles.inlineActionButton} onClick={() => startRenameCardIteration(iteration)}>
-                          重命名
-                        </Button>
-                      </div>
+                          {selectedEntry.reason}
+                        </button>
+                      ) : (
+                        <span className={`${styles.tagChip} ${styles.iterationReasonChip}`}>初始底稿</span>
+                      )}
                     </div>
                   );
-                })
+                })()
               ) : (
                 <p className={styles.emptyState}>暂无整卡迭代，当前默认为“原始”。</p>
               )}

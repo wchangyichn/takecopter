@@ -458,11 +458,14 @@
 }
 
 .detailPanel {
-  padding: var(--space-6);
+  padding: calc(var(--space-6) + 8px) var(--space-6) calc(var(--space-8) + env(safe-area-inset-bottom));
   position: relative;
   animation: slideInRight 250ms ease-out;
   overflow-y: auto;
   min-height: 0;
+  scroll-padding-top: calc(var(--space-6) + 8px);
+  scroll-padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
 }
 
 .summaryPanel {
@@ -793,6 +796,10 @@
   z-index: calc(var(--z-modal) + 30);
 }
 
+.topMostOverlay {
+  z-index: calc(var(--z-modal) + 40);
+}
+
 .previewOverlay {
   position: fixed;
   inset: 0;
@@ -916,7 +923,10 @@
   border: 1px solid color-mix(in srgb, var(--border-light) 76%, var(--slate-200));
   border-radius: var(--radius-xl);
   box-shadow: 0 24px 62px rgba(15, 23, 42, 0.28), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
-  padding: var(--space-6);
+  padding: calc(var(--space-6) + 8px) var(--space-6) calc(var(--space-8) + env(safe-area-inset-bottom));
+  scroll-padding-top: calc(var(--space-6) + 8px);
+  scroll-padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
 }
 
 .editorHeader {
@@ -950,6 +960,28 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+}
+
+.cardSwitching {
+  animation: cardSourceSwitch 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cardSourceSwitch {
+  0% {
+    opacity: 0.55;
+    transform: translateY(10px) scale(0.992);
+    filter: blur(2px);
+  }
+  45% {
+    opacity: 0.78;
+    transform: translateY(-2px) scale(1.004);
+    filter: blur(0.8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
 }
 
 .fixedMetaCard {
@@ -1328,6 +1360,27 @@
   gap: var(--space-2);
 }
 
+.polishChannelNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--teal-300) 60%, var(--border-light));
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--teal-100) 44%, transparent), transparent 55%),
+    linear-gradient(145deg, color-mix(in srgb, var(--teal-50) 78%, white), color-mix(in srgb, var(--slate-50) 70%, white));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset, 0 10px 22px rgba(8, 47, 73, 0.14);
+}
+
+.polishChannelTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--teal-700) 72%, var(--slate-700));
+}
+
 .polishRecentItem {
   border: 1px solid var(--border-light);
   background: var(--slate-50);
@@ -1641,6 +1694,50 @@
   gap: 4px;
 }
 
+.fieldDiffPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.fieldDiffColumn {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  background: color-mix(in srgb, var(--slate-50) 82%, white);
+}
+
+.fieldDiffTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--slate-500);
+}
+
+.fieldDiffLineMuted,
+.fieldDiffLineAdded,
+.fieldDiffLineRemoved,
+.fieldDiffLineChanged {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fieldDiffLineMuted {
+  color: var(--slate-500);
+}
+
+.fieldDiffLineAdded {
+  color: var(--teal-700);
+}
+
+.fieldDiffLineRemoved {
+  color: var(--rose-700);
+}
+
+.fieldDiffLineChanged {
+  color: var(--amber-700);
+}
+
 .iterationItem {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
@@ -1740,6 +1837,49 @@
   gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.cardEvolutionTimeline {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.cardEvolutionNode {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--slate-50) 88%, white);
+  color: var(--slate-600);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.cardEvolutionNode:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--teal-300) 58%, var(--border-light));
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.14);
+}
+
+.cardEvolutionNodeActive {
+  border-color: var(--teal-400);
+  background: color-mix(in srgb, var(--teal-50) 80%, white);
+  color: var(--teal-700);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal-200) 65%, transparent), 0 12px 24px rgba(8, 47, 73, 0.2);
+}
+
+.cardParentBadge {
+  width: fit-content;
+  font-size: 11px;
+  color: var(--slate-600);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--slate-50) 86%, white);
 }
 
 .cardIterationRenameRow {
@@ -1844,6 +1984,11 @@
   box-shadow: 0 6px 18px rgba(244, 99, 71, 0.12);
 }
 
+.cardIterationItemActive {
+  border-color: var(--teal-400);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal-200) 58%, transparent), 0 14px 28px rgba(8, 47, 73, 0.2);
+}
+
 .iterationDraftSection {
   display: flex;
   flex-direction: column;
@@ -1878,10 +2023,32 @@
   background: var(--rose-600);
   color: #fff;
   border-radius: var(--radius-full);
-  padding: 1px 8px;
-  font-size: 11px;
+  padding: 4px 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
+}
+
+.iterationVersionButton {
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.iterationVersionButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(244, 63, 94, 0.22);
+}
+
+.iterationReasonButton {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--border-light) 70%, var(--slate-300));
+  background: color-mix(in srgb, var(--slate-50) 88%, white);
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.iterationReasonButton:hover {
+  transform: translateY(-1px);
+  border-color: var(--coral-300);
 }
 
 .iterationVersionTagCorner {
@@ -3125,6 +3292,18 @@
     color: #fff;
   }
 
+  .polishChannelNotice {
+    border-color: color-mix(in srgb, var(--teal-300) 35%, var(--slate-600));
+    background:
+      radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.16), transparent 58%),
+      linear-gradient(145deg, rgba(15, 118, 110, 0.18), rgba(30, 41, 59, 0.94));
+    box-shadow: 0 1px 0 rgba(45, 212, 191, 0.18) inset, 0 12px 24px rgba(2, 6, 23, 0.42);
+  }
+
+  .polishChannelTitle {
+    color: color-mix(in srgb, var(--teal-200) 82%, var(--slate-100));
+  }
+
   .cardIterationBoard {
     border-color: var(--slate-600);
     background:
@@ -3144,6 +3323,64 @@
   .cardIterationItem {
     border-color: var(--slate-600);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .cardIterationItemActive {
+    border-color: rgba(45, 212, 191, 0.55);
+    box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.25), 0 16px 30px rgba(2, 6, 23, 0.42);
+  }
+
+  .fieldDiffColumn {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.82), rgba(30, 41, 59, 0.9));
+  }
+
+  .fieldDiffTitle,
+  .fieldDiffLineMuted {
+    color: var(--slate-300);
+  }
+
+  .fieldDiffLineAdded {
+    color: var(--teal-200);
+  }
+
+  .fieldDiffLineRemoved {
+    color: var(--rose-200);
+  }
+
+  .fieldDiffLineChanged {
+    color: var(--amber-200);
+  }
+
+  .cardEvolutionNode {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.88), rgba(30, 41, 59, 0.92));
+    color: var(--slate-300);
+  }
+
+  .cardEvolutionNodeActive {
+    border-color: rgba(45, 212, 191, 0.55);
+    background: linear-gradient(180deg, rgba(15, 118, 110, 0.32), rgba(30, 41, 59, 0.94));
+    color: var(--teal-100);
+  }
+
+  .iterationVersionButton:hover {
+    box-shadow: 0 10px 20px rgba(244, 63, 94, 0.28);
+  }
+
+  .iterationReasonButton {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.88), rgba(30, 41, 59, 0.92));
+  }
+
+  .iterationReasonButton:hover {
+    border-color: var(--coral-400);
+  }
+
+  .cardParentBadge {
+    border-color: var(--slate-600);
+    background: linear-gradient(180deg, rgba(51, 65, 85, 0.88), rgba(30, 41, 59, 0.92));
+    color: var(--slate-300);
   }
 
   .addTagIconButton {
@@ -3377,5 +3614,11 @@
 
   .customFieldList {
     flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardSwitching {
+    animation: none;
   }
 }
