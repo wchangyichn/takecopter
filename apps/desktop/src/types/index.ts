@@ -1,4 +1,4 @@
-export type ViewType = 'home' | 'setting' | 'create';
+export type ViewType = 'home' | 'setting' | 'create' | 'outline';
 
 export interface Story {
   id: string;

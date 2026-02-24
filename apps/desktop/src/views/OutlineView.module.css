@@ -1,0 +1,542 @@
+.page {
+  --outline-bg-base: #0e0f11;
+  --outline-bg-1: #13151a;
+  --outline-bg-2: #1a1d24;
+  --outline-bg-3: #22262f;
+  --outline-border: #2e3340;
+  --outline-text-1: #e8eaf0;
+  --outline-text-2: #9aa0b3;
+  --outline-text-3: #5c6278;
+  --outline-accent: #5b7cf6;
+  display: grid;
+  grid-template-rows: 44px minmax(360px, 1fr) 5px 220px 22px;
+  height: calc(100vh - 128px);
+  min-height: 700px;
+  border: 1px solid var(--outline-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--outline-bg-base);
+  color: var(--outline-text-1);
+}
+
+.topBar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  background: var(--outline-bg-1);
+  border-bottom: 1px solid var(--outline-border);
+}
+
+.topLeft,
+.topRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topRight {
+  justify-content: flex-end;
+}
+
+.brand {
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--outline-text-2);
+}
+
+.projectTitle {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--outline-text-1);
+}
+
+.activeLineBtn,
+.iconBtn,
+.tab,
+.smallBtn,
+.primaryBtn,
+.secondaryBtn {
+  height: 28px;
+  border: 1px solid var(--outline-border);
+  border-radius: 8px;
+  background: var(--outline-bg-2);
+  color: var(--outline-text-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.iconBtn {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+}
+
+.primaryBtn {
+  background: color-mix(in srgb, var(--outline-accent) 22%, var(--outline-bg-2));
+  border-color: color-mix(in srgb, var(--outline-accent) 48%, var(--outline-border));
+}
+
+.secondaryBtn,
+.tab,
+.smallBtn {
+  color: var(--outline-text-2);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tabActive,
+.smallBtnActive {
+  color: var(--outline-text-1);
+  border-color: color-mix(in srgb, var(--outline-accent) 55%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 14%, var(--outline-bg-2));
+}
+
+.lineDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.lineType {
+  font-size: 11px;
+  color: var(--outline-text-2);
+}
+
+.divider {
+  color: var(--outline-text-3);
+}
+
+.mainArea {
+  display: grid;
+  grid-template-columns: auto 5px minmax(0, 1fr) 5px auto;
+  min-height: 0;
+}
+
+.leftPanel,
+.rightPanel {
+  background: var(--outline-bg-1);
+  border-right: 1px solid var(--outline-border);
+  overflow: auto;
+}
+
+.rightPanel {
+  border-right: 0;
+  border-left: 1px solid var(--outline-border);
+  transform: translateX(100%);
+  transition: transform 200ms ease-out;
+}
+
+.rightPanelOpen {
+  transform: translateX(0);
+}
+
+.section {
+  padding: 10px;
+  border-bottom: 1px solid var(--outline-border);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--outline-text-2);
+}
+
+.listItem {
+  width: 100%;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--outline-text-1);
+  text-align: left;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.listItem:hover {
+  background: var(--outline-bg-3);
+}
+
+.verticalSplitter,
+.horizontalSplitter {
+  border: 0;
+  background: var(--outline-border);
+  cursor: col-resize;
+  padding: 0;
+}
+
+.horizontalSplitter {
+  cursor: row-resize;
+  width: 100%;
+}
+
+.canvasArea {
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.canvasToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: var(--outline-bg-1);
+  border-bottom: 1px solid var(--outline-border);
+}
+
+.toolbarGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenarioGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: auto;
+  padding: 0 4px;
+}
+
+.smallBtn {
+  height: 24px;
+  font-size: 12px;
+}
+
+.zoomLabel {
+  font-size: 12px;
+  color: var(--outline-text-2);
+}
+
+.canvas {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle, rgba(154, 160, 179, 0.18) 1px, transparent 1px) 0 0 / 18px 18px,
+    var(--outline-bg-base);
+  cursor: grab;
+}
+
+.canvasPanning {
+  cursor: grabbing;
+}
+
+.canvasHint {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  z-index: 2;
+  font-size: 11px;
+  color: var(--outline-text-3);
+}
+
+.scene {
+  width: 980px;
+  min-height: 440px;
+  padding: 24px 18px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.sourceTreeView,
+.focusMergedView {
+  position: relative;
+  width: 100%;
+}
+
+.sourceTreeView {
+  height: 320px;
+}
+
+.focusMergedView {
+  height: 430px;
+}
+
+.sourceTreeLines,
+.focusMergeLines {
+  position: absolute;
+  inset: 0;
+}
+
+.graphLineLabel {
+  position: absolute;
+  left: 24px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid;
+  background: var(--outline-bg-2);
+  color: var(--outline-text-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.graphNode,
+.graphNodeNeutral {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid;
+  transform: translate(-50%, -50%);
+  background: var(--outline-bg-base);
+}
+
+.graphNodeNeutral {
+  border-color: var(--outline-text-2);
+}
+
+.graphMergeNode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--outline-accent) 64%, var(--outline-border));
+  background: var(--outline-bg-base);
+}
+
+.graphMergeNode:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--outline-accent) 24%, transparent);
+}
+
+.segmentContainerInline {
+  position: absolute;
+  transform: translateY(-50%);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 42%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 7%, var(--outline-bg-2));
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  z-index: 2;
+}
+
+.segmentPillInline {
+  position: absolute;
+  transform: translateY(-50%);
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 56%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 14%, var(--outline-bg-2));
+  color: var(--outline-text-1);
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 0 12px;
+  text-align: left;
+  z-index: 2;
+}
+
+.segmentBadge {
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 56%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 14%, var(--outline-bg-2));
+  color: var(--outline-text-1);
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.segmentChildren {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.segmentChildCard {
+  width: 108px;
+  min-width: 108px;
+  height: 66px;
+  border-radius: 6px;
+  border: 1px solid var(--outline-border);
+  background: var(--outline-bg-2);
+  color: var(--outline-text-1);
+  text-align: left;
+  padding: 8px;
+}
+
+.graphCard {
+  position: absolute;
+  width: 108px;
+  height: 66px;
+  border-radius: 6px;
+  border: 1px solid var(--outline-border);
+  background: var(--outline-bg-2);
+  color: var(--outline-text-1);
+  text-align: left;
+  padding: 8px;
+}
+
+.sliceTitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sliceMeta {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--outline-text-2);
+}
+
+.rightHeader {
+  height: 44px;
+  border-bottom: 1px solid var(--outline-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.rightHeader h2 {
+  margin: 0;
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+.rightTabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--outline-border);
+}
+
+.rightContent {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--outline-text-2);
+}
+
+.editZone {
+  background: var(--outline-bg-1);
+  border-top: 1px solid var(--outline-border);
+  display: grid;
+  grid-template-rows: 38px 36px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.editHeader,
+.editTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--outline-border);
+  font-size: 12px;
+}
+
+.editHeader {
+  color: var(--outline-text-2);
+}
+
+.editHeader strong {
+  color: var(--outline-text-1);
+}
+
+.dragHint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--outline-text-3);
+}
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.timelineCard {
+  width: 120px;
+  min-width: 120px;
+  height: 66px;
+  border-radius: 8px;
+  border: 1px solid var(--outline-border);
+  background: var(--outline-bg-2);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.timelineSegment {
+  min-width: 130px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 56%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 16%, var(--outline-bg-2));
+  color: var(--outline-text-1);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  padding: 0 12px;
+}
+
+.timelineAdd {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px dashed var(--outline-text-3);
+  background: transparent;
+  color: var(--outline-text-2);
+}
+
+.bottomStatus {
+  height: 22px;
+  border-top: 1px solid var(--outline-border);
+  background: var(--outline-bg-1);
+  color: var(--outline-text-3);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+@media (max-width: 1200px) {
+  .topBar {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 8px 10px;
+  }
+
+  .projectTitle {
+    text-align: left;
+  }
+
+  .mainArea {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 5px auto;
+  }
+
+  .leftPanel,
+  .rightPanel {
+    width: 100%;
+    transform: none;
+  }
+
+  .verticalSplitter {
+    display: none;
+  }
+}

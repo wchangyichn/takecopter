@@ -1,7 +1,7 @@
 import { useAppState } from './hooks/useAppState';
 import { useProjectData } from './hooks/useProjectData';
 import { AppShell } from './components/layout';
-import { HomeView, SettingView, CreateView, ProjectSetupView, RenameStoryDialog, NewStoryDialog, DeleteStoryDialog } from './views';
+import { HomeView, SettingView, CreateView, OutlineView, ProjectSetupView, RenameStoryDialog, NewStoryDialog, DeleteStoryDialog } from './views';
 import { useState } from 'react';
 import './index.css';
 
@@ -266,6 +266,26 @@ function App() {
             treeData={currentTree}
             onTreeChange={(tree) => saveTreeData(selectedStoryId, tree)}
           />
+        ) : (
+          <HomeView
+            stories={stories}
+            onStorySelect={handleStorySelect}
+            onCreateStory={handleOpenCreateStoryDialog}
+            isCreatingStory={isCreatingStory}
+            onExportProject={exportProjectFile}
+            onBackupLocalDatabase={handleBackupLocalDatabase}
+            onRelinkLocalDatabase={handleRelinkLocalDatabase}
+            onImportProject={handleImportProject}
+            onOpenStoryFolder={handleOpenStoryFolder}
+            onOpenStoryDatabase={handleOpenStoryDatabase}
+            onExportStory={handleExportStory}
+            onRenameStory={handleRenameStory}
+            onDeleteStory={handleDeleteStoryRequest}
+          />
+        );
+      case 'outline':
+        return selectedStoryId ? (
+          <OutlineView />
         ) : (
           <HomeView
             stories={stories}
