@@ -114,6 +114,19 @@
   color: var(--outline-text-2);
 }
 
+.activeMark {
+  margin-left: 4px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 70%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 32%, var(--outline-bg-2));
+  color: var(--outline-text-1);
+  font-size: 9px;
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 14px;
+  padding: 0 6px;
+}
+
 .divider {
   color: var(--outline-text-3);
 }
@@ -172,6 +185,11 @@
   background: var(--outline-bg-3);
 }
 
+.listItemSelected {
+  background: color-mix(in srgb, var(--outline-accent) 16%, var(--outline-bg-3));
+  border: 1px solid color-mix(in srgb, var(--outline-accent) 56%, var(--outline-border));
+}
+
 .verticalSplitter,
 .horizontalSplitter {
   border: 0;
@@ -227,7 +245,8 @@
 
 .canvas {
   position: relative;
-  overflow: hidden;
+  overflow: auto;
+  min-height: 0;
   background: radial-gradient(circle, rgba(154, 160, 179, 0.18) 1px, transparent 1px) 0 0 / 18px 18px,
     var(--outline-bg-base);
   cursor: grab;
@@ -248,7 +267,7 @@
 
 .scene {
   width: 980px;
-  min-height: 440px;
+  min-height: 0;
   padding: 24px 18px;
   transform-origin: 0 0;
   will-change: transform;
@@ -289,6 +308,21 @@
   font-size: 12px;
 }
 
+.graphLineLabelActive {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--outline-accent) 48%, var(--outline-border));
+}
+
+.graphLineLabelDimmed {
+  opacity: 0.28;
+  filter: saturate(0.35) brightness(0.78);
+}
+
+.graphLineLabelPrimary {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 72%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 34%, var(--outline-bg-2));
+  transform: scale(1.05);
+}
+
 .graphNode,
 .graphNodeNeutral {
   position: absolute;
@@ -298,6 +332,15 @@
   border: 2px solid;
   transform: translate(-50%, -50%);
   background: var(--outline-bg-base);
+}
+
+.graphNodeActive {
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--outline-accent) 44%, transparent);
+  transform: translate(-50%, -50%) scale(1.14);
+}
+
+.graphNodeDimmed {
+  opacity: 0.22;
 }
 
 .graphNodeNeutral {
@@ -330,6 +373,10 @@
   z-index: 2;
 }
 
+.segmentContainerInlineActive {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--outline-accent) 52%, var(--outline-border));
+}
+
 .segmentPillInline {
   position: absolute;
   transform: translateY(-50%);
@@ -345,6 +392,16 @@
   z-index: 2;
 }
 
+.segmentPillInlineActive {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 70%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 40%, var(--outline-bg-2));
+}
+
+.segmentPillInlineDimmed {
+  opacity: 0.24;
+  filter: saturate(0.45) brightness(0.8);
+}
+
 .segmentBadge {
   height: 30px;
   border-radius: 999px;
@@ -355,6 +412,11 @@
   font-size: 11px;
   padding: 0 12px;
   text-align: left;
+}
+
+.segmentBadgeActive {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 72%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 38%, var(--outline-bg-2));
 }
 
 .segmentChildren {
@@ -375,6 +437,12 @@
   padding: 8px;
 }
 
+.segmentChildCardActive {
+  border-color: color-mix(in srgb, var(--outline-accent) 58%, var(--outline-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--outline-accent) 24%, var(--outline-bg-2));
+}
+
 .graphCard {
   position: absolute;
   width: 108px;
@@ -385,6 +453,17 @@
   color: var(--outline-text-1);
   text-align: left;
   padding: 8px;
+}
+
+.graphCardActive {
+  border-color: color-mix(in srgb, var(--outline-accent) 58%, var(--outline-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--outline-accent) 24%, var(--outline-bg-2));
+}
+
+.graphCardDimmed {
+  opacity: 0.24;
+  filter: saturate(0.4) brightness(0.8);
 }
 
 .sliceTitle {
@@ -426,6 +505,32 @@
   padding: 10px;
   font-size: 12px;
   color: var(--outline-text-2);
+  display: grid;
+  gap: 8px;
+}
+
+.lineActivator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lineActivatorBtn {
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--outline-border);
+  background: var(--outline-bg-2);
+  color: var(--outline-text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.lineActivatorBtnActive {
+  color: var(--outline-text-1);
+  border-color: color-mix(in srgb, var(--outline-accent) 60%, var(--outline-border));
+  background: color-mix(in srgb, var(--outline-accent) 14%, var(--outline-bg-2));
 }
 
 .editZone {

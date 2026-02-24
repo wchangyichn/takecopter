@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
 import styles from './OutlineView.module.css';
 
 type FocusType = 'line' | 'slice' | 'segment';
+type RightTab = 'info' | 'structure' | 'cards';
 type SplitterType = 'left' | 'right' | 'bottom';
 
 interface FocusState {
@@ -210,6 +211,64 @@ function clampZoom(value: number) {
 const ALL_VIEW_ZOOM_THRESHOLD = 78;
 const FOCUS_VIEW_ZOOM_THRESHOLD = 128;
 
+function useOutlineSelectionState({
+  focus,
+  activeLineId,
+  lines,
+  junctions,
+  defaultSegmentSlices,
+}: {
+  focus: FocusState | null;
+  activeLineId: string;
+  lines: OutlineLine[];
+  junctions: MockScenario['junctions'];
+  defaultSegmentSlices: readonly ScenarioSlice[];
+}) {
+  const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0];
+
+  const selectedJunction = useMemo(() => {
+    if (!focus) {
+      return null;
+    }
+    if (focus.type === 'segment') {
+      return junctions.find((item) => item.id === focus.id) ?? null;
+    }
+    if (focus.type === 'slice') {
+      return junctions.find((item) => item.segmentSlices.some((slice) => `seg-${slice.id}` === focus.id)) ?? null;
+    }
+    return null;
+  }, [focus, junctions]);
+
+  const focusSegmentSlices = selectedJunction?.segmentSlices ?? defaultSegmentSlices;
+
+  const selectedLineIds = useMemo(() => {
+    if (!focus) {
+      return new Set<string>([activeLine.id]);
+    }
+    if (focus.type === 'line') {
+      return new Set<string>([focus.id]);
+    }
+    if (focus.type === 'segment') {
+      const selected = junctions.find((item) => item.id === focus.id);
+      return new Set<string>(selected?.lineIds ?? []);
+    }
+    const fromLine = lines.find((line) => focus.id.startsWith(`${line.id}-`));
+    if (fromLine) {
+      return new Set<string>([fromLine.id]);
+    }
+    const fromSegment = junctions.find((item) => item.segmentSlices.some((slice) => `seg-${slice.id}` === focus.id));
+    return new Set<string>(fromSegment?.lineIds ?? []);
+  }, [activeLine.id, focus, junctions, lines]);
+
+  return {
+    activeLine,
+    selectedJunction,
+    focusSegmentSlices,
+    selectedLineIds,
+    isSegmentContext: Boolean(selectedJunction),
+  };
+}
+
 export function OutlineView() {
   const [scenarioId, setScenarioId] = useState(mockScenarios[0].id);
   const scenario = useMemo(() => mockScenarios.find((item) => item.id === scenarioId) ?? mockScenarios[0], [scenarioId]);
@@ -228,13 +287,14 @@ export function OutlineView() {
   const [viewMode, setViewMode] = useState<'all' | 'focus'>('focus');
   const [activeLineId, setActiveLineId] = useState(lines[0].id);
   const [focus, setFocus] = useState<FocusState | null>(null);
+  const [rightTab, setRightTab] = useState<RightTab>('info');
   const [pan, setPan] = useState<PanState>({ x: 0, y: 0 });
   const [panDrag, setPanDrag] = useState<PanDragState | null>(null);
 
   const rightOpen = Boolean(focus);
   const participantSet = useMemo(() => new Set(primaryJunction.lineIds), [primaryJunction.lineIds]);
   const allStepY = Math.max(56, 44 + segmentSlices.length * 6);
-  const focusStepY = Math.max(88, 72 + segmentSlices.length * 10);
+  const focusStepY = allStepY;
   const allBranchY = lines.map((_, index) => layout.allBaseY + index * allStepY);
   const focusBranchY = lines.map((_, index) => layout.focusBaseY + index * focusStepY);
   const participantAllY = allBranchY.filter((_, index) => participantSet.has(lines[index].id));
@@ -266,7 +326,8 @@ export function OutlineView() {
         const previous = acc[acc.length - 1];
         const cursor = previous ? previous.x + previous.width + minGap : primaryJunctionLeftX;
         const x = Math.max(item.desiredX, cursor);
-        return [...acc, { ...item, x, width }];
+        acc.push({ ...item, x, width });
+        return acc;
       }, []);
   }, [junctions, primaryJunctionLeftX]);
 
@@ -276,11 +337,64 @@ export function OutlineView() {
   const trunkEndX = afterNodeX + 80;
   const sceneWidth = trunkEndX + 120;
   const allGraphHeight = Math.max(...allBranchY) + 170;
-  const focusGraphHeight = Math.max(...focusBranchY) + 190;
-  const sceneMinHeight = Math.max(allGraphHeight, focusGraphHeight) + 30;
+  const focusGraphHeight = allGraphHeight;
   const useFocusJunctionChain = junctions.length > 1;
 
-  const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0];
+  const { activeLine, selectedJunction, focusSegmentSlices, selectedLineIds, isSegmentContext } = useOutlineSelectionState({
+    focus,
+    activeLineId,
+    lines,
+    junctions,
+    defaultSegmentSlices: segmentSlices,
+  });
+  const activeLineInSegment = isSegmentContext && selectedLineIds.has(activeLine.id);
+
+  const lineOpacity = (lineId: string) => {
+    if (!isSegmentContext) {
+      return selectedLineIds.has(lineId) ? 1 : 0.68;
+    }
+    if (lineId === activeLine.id && selectedLineIds.has(lineId)) {
+      return 1;
+    }
+    if (selectedLineIds.has(lineId)) {
+      return 0.62;
+    }
+    return 0.68;
+  };
+
+  const selectLine = (line: OutlineLine) => {
+    setActiveLineId(line.id);
+    setFocus({ type: 'line', id: line.id, title: line.name });
+    setRightTab('info');
+  };
+
+  const selectSlice = (id: string, title: string) => {
+    setFocus({ type: 'slice', id, title });
+    setRightTab('info');
+  };
+
+  const selectSegment = (id: string, title: string) => {
+    setFocus({ type: 'segment', id, title });
+    setRightTab('structure');
+  };
+
+  const isSegmentSelected = (segmentId: string) => {
+    if (!focus) {
+      return false;
+    }
+    if (focus.type === 'segment') {
+      return focus.id === segmentId;
+    }
+    if (focus.type === 'slice') {
+      const source = junctions.find((item) => item.id === segmentId);
+      return source ? source.segmentSlices.some((slice) => `seg-${slice.id}` === focus.id) : false;
+    }
+    return false;
+  };
+
+  const activateLineOnly = (lineId: string) => {
+    setActiveLineId(lineId);
+  };
   const syncViewModeByZoom = (nextZoom: number) => {
     if (nextZoom <= ALL_VIEW_ZOOM_THRESHOLD) {
       setViewMode('all');
@@ -425,7 +539,12 @@ export function OutlineView() {
           <section className={styles.section}>
             <div className={styles.sectionHeader}><span>游离区</span><span>{floatingSlices.length}</span></div>
             {floatingSlices.map((item) => (
-              <button type="button" key={item} className={styles.listItem} onClick={() => setFocus({ type: 'slice', id: item, title: item })}>
+              <button
+                type="button"
+                key={item}
+                className={`${styles.listItem} ${focus?.type === 'slice' && focus.id === item ? styles.listItemSelected : ''}`}
+                onClick={() => selectSlice(item, item)}
+              >
                 ◌ {item}
               </button>
             ))}
@@ -433,7 +552,12 @@ export function OutlineView() {
           <section className={styles.section}>
             <div className={styles.sectionHeader}><span>保留区</span><span>{orphanageSlices.length}</span></div>
             {orphanageSlices.map((item) => (
-              <button type="button" key={item} className={styles.listItem} onClick={() => setFocus({ type: 'slice', id: item, title: item })}>
+              <button
+                type="button"
+                key={item}
+                className={`${styles.listItem} ${focus?.type === 'slice' && focus.id === item ? styles.listItemSelected : ''}`}
+                onClick={() => selectSlice(item, item)}
+              >
                 ◎ {item}
               </button>
             ))}
@@ -441,7 +565,12 @@ export function OutlineView() {
           <section className={styles.section}>
             <div className={styles.sectionHeader}><span>回收站</span><span>{trashSlices.length}</span></div>
             {trashSlices.map((item) => (
-              <button type="button" key={item} className={styles.listItem} onClick={() => setFocus({ type: 'slice', id: item, title: item })}>
+              <button
+                type="button"
+                key={item}
+                className={`${styles.listItem} ${focus?.type === 'slice' && focus.id === item ? styles.listItemSelected : ''}`}
+                onClick={() => selectSlice(item, item)}
+              >
                 ⊖ {item}
               </button>
             ))}
@@ -483,7 +612,7 @@ export function OutlineView() {
 
             <div
               className={styles.scene}
-              style={{ width: `${sceneWidth}px`, minHeight: `${sceneMinHeight}px`, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})` }}
+              style={{ width: `${sceneWidth}px`, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})` }}
             >
               {viewMode === 'all' ? (
                 <div className={styles.sourceTreeView} style={{ height: `${allGraphHeight}px` }}>
@@ -491,18 +620,45 @@ export function OutlineView() {
                     <title>全知视角关系图</title>
                     {lines.map((line, index) => (
                       <g key={`${line.id}-all-path`}>
-                        <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                        {isSegmentContext && activeLine.id === line.id && (
+                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                        )}
+                        {isSegmentContext && selectedLineIds.has(line.id) && (
+                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                        )}
+                        <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         {participantSet.has(line.id) ? (
                           <>
-                            <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="2" fill="none" />
-                            <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                            {isSegmentContext && selectedLineIds.has(line.id) && (
+                              <>
+                                {activeLine.id === line.id && (
+                                  <>
+                                    <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                    <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                  </>
+                                )}
+                                <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                                <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                              </>
+                            )}
+                            <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
+                            <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                           </>
                         ) : (
-                          <path d={`M ${layout.preBX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                          <path d={`M ${layout.preBX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         )}
-                        <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                        {isSegmentContext && selectedLineIds.has(line.id) && (
+                          <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? '9' : '4'} fill="none" opacity={activeLine.id === line.id ? '0.24' : '0.12'} />
+                        )}
+                        <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                       </g>
                     ))}
+                    {isSegmentContext && (
+                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke="#8ba2ff" strokeWidth="4" fill="none" opacity="0.12" />
+                    )}
+                    {activeLineInSegment && (
+                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke={activeLine.color} strokeWidth="9" fill="none" opacity="0.18" />
+                    )}
                     <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke="#9aa0b3" strokeWidth="2" fill="none" />
                   </svg>
 
@@ -510,15 +666,13 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-all-label`}
                       type="button"
-                      className={styles.graphLineLabel}
+                      className={`${styles.graphLineLabel} ${selectedLineIds.has(line.id) ? styles.graphLineLabelActive : ''} ${isSegmentContext && activeLine.id === line.id ? styles.graphLineLabelPrimary : ''}`}
                       style={{ top: `${allBranchY[index] - 16}px`, borderColor: line.color }}
-                      onClick={() => {
-                        setActiveLineId(line.id);
-                        setFocus({ type: 'line', id: line.id, title: line.name });
-                      }}
+                      onClick={() => selectLine(line)}
                     >
                       <span className={styles.lineDot} style={{ backgroundColor: line.color }} />
                       <span>{line.name}</span>
+                      {activeLine.id === line.id && <span className={styles.activeMark}>ACTIVE</span>}
                     </button>
                   ))}
 
@@ -526,9 +680,9 @@ export function OutlineView() {
                     <button
                       key={`${item.id}-all-pill`}
                       type="button"
-                      className={styles.segmentPillInline}
+                      className={`${styles.segmentPillInline} ${isSegmentSelected(item.id) ? styles.segmentPillInlineActive : isSegmentContext ? styles.segmentPillInlineDimmed : ''}`}
                       style={{ left: `${item.x}px`, top: `${allMergeY}px`, width: `${item.width}px` }}
-                      onClick={() => setFocus({ type: 'segment', id: item.id, title: item.title })}
+                      onClick={() => selectSegment(item.id, item.title)}
                     >
                       {item.title}
                     </button>
@@ -538,9 +692,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-all-a`}
                       type="button"
-                      className={styles.graphNode}
+                      className={`${styles.graphNode} ${focus?.type === 'slice' && focus.id === `${line.id}-${beforeSlices[0].id}` ? styles.graphNodeActive : ''}`}
                       style={{ left: `${layout.preAX}px`, top: `${allBranchY[index]}px`, borderColor: line.color }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${beforeSlices[0].id}`, title: beforeSlices[0].title })}
+                      onClick={() => selectSlice(`${line.id}-${beforeSlices[0].id}`, beforeSlices[0].title)}
                       aria-label={`${line.name}-${beforeSlices[0].title}`}
                     />
                   ))}
@@ -549,9 +703,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-all-b`}
                       type="button"
-                      className={styles.graphNode}
+                      className={`${styles.graphNode} ${focus?.type === 'slice' && focus.id === `${line.id}-${beforeSlices[1].id}` ? styles.graphNodeActive : ''}`}
                       style={{ left: `${layout.preBX}px`, top: `${allBranchY[index]}px`, borderColor: line.color }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${beforeSlices[1].id}`, title: beforeSlices[1].title })}
+                      onClick={() => selectSlice(`${line.id}-${beforeSlices[1].id}`, beforeSlices[1].title)}
                       aria-label={`${line.name}-${beforeSlices[1].title}`}
                     />
                   ))}
@@ -560,9 +714,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-all-after`}
                       type="button"
-                      className={styles.graphNode}
+                      className={`${styles.graphNode} ${focus?.type === 'slice' && focus.id === `${line.id}-${afterSlice.id}` ? styles.graphNodeActive : ''}`}
                       style={{ left: `${afterNodeX}px`, top: `${allBranchY[index]}px`, borderColor: line.color }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${afterSlice.id}`, title: afterSlice.title })}
+                      onClick={() => selectSlice(`${line.id}-${afterSlice.id}`, afterSlice.title)}
                       aria-label={`${line.name}-${afterSlice.title}`}
                     />
                   ))}
@@ -573,19 +727,48 @@ export function OutlineView() {
                     <title>聚焦视角合并关系图</title>
                     {lines.map((line, index) => (
                       <g key={`${line.id}-focus-path`}>
-                        <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                        {isSegmentContext && activeLine.id === line.id && (
+                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                        )}
+                        {isSegmentContext && selectedLineIds.has(line.id) && (
+                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                        )}
+                        <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         {participantSet.has(line.id) ? (
                           <>
-                            <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
-                            <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="2" fill="none" />
-                            <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                            {isSegmentContext && selectedLineIds.has(line.id) && (
+                              <>
+                                {activeLine.id === line.id && (
+                                  <>
+                                    <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                    <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                    <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                  </>
+                                )}
+                                <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                                <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                                <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                              </>
+                            )}
+                            <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
+                            <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
+                            <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                           </>
                         ) : (
-                          <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                          <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         )}
-                        <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" />
+                        {isSegmentContext && selectedLineIds.has(line.id) && (
+                          <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? '9' : '4'} fill="none" opacity={activeLine.id === line.id ? '0.24' : '0.12'} />
+                        )}
+                        <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                       </g>
                     ))}
+                    {isSegmentContext && (
+                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke="#8ba2ff" strokeWidth="4" fill="none" opacity="0.12" />
+                    )}
+                    {activeLineInSegment && (
+                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke={activeLine.color} strokeWidth="9" fill="none" opacity="0.18" />
+                    )}
                     <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke="#9aa0b3" strokeWidth="2" fill="none" />
                   </svg>
 
@@ -593,15 +776,13 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-focus-label`}
                       type="button"
-                      className={styles.graphLineLabel}
+                      className={`${styles.graphLineLabel} ${selectedLineIds.has(line.id) ? styles.graphLineLabelActive : ''} ${isSegmentContext && activeLine.id === line.id ? styles.graphLineLabelPrimary : ''}`}
                       style={{ top: `${focusBranchY[index] - 16}px`, borderColor: line.color }}
-                      onClick={() => {
-                        setActiveLineId(line.id);
-                        setFocus({ type: 'line', id: line.id, title: line.name });
-                      }}
+                      onClick={() => selectLine(line)}
                     >
                       <span className={styles.lineDot} style={{ backgroundColor: line.color }} />
                       <span>{line.name}</span>
+                      {activeLine.id === line.id && <span className={styles.activeMark}>ACTIVE</span>}
                     </button>
                   ))}
 
@@ -609,9 +790,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-focus-card-a`}
                       type="button"
-                      className={styles.graphCard}
+                      className={`${styles.graphCard} ${focus?.type === 'slice' && focus.id === `${line.id}-${beforeSlices[0].id}` ? styles.graphCardActive : ''}`}
                       style={{ left: `${layout.preAX - 54}px`, top: `${focusBranchY[index] - 33}px` }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${beforeSlices[0].id}`, title: beforeSlices[0].title })}
+                      onClick={() => selectSlice(`${line.id}-${beforeSlices[0].id}`, beforeSlices[0].title)}
                     >
                       <span className={styles.sliceTitle}>{beforeSlices[0].title}</span>
                       <span className={styles.sliceMeta}>{beforeSlices[0].meta}</span>
@@ -622,9 +803,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-focus-card-b`}
                       type="button"
-                      className={styles.graphCard}
+                      className={`${styles.graphCard} ${focus?.type === 'slice' && focus.id === `${line.id}-${beforeSlices[1].id}` ? styles.graphCardActive : ''}`}
                       style={{ left: `${layout.preBX - 54}px`, top: `${focusBranchY[index] - 33}px` }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${beforeSlices[1].id}`, title: beforeSlices[1].title })}
+                      onClick={() => selectSlice(`${line.id}-${beforeSlices[1].id}`, beforeSlices[1].title)}
                     >
                       <span className={styles.sliceTitle}>{beforeSlices[1].title}</span>
                       <span className={styles.sliceMeta}>{beforeSlices[1].meta}</span>
@@ -636,22 +817,22 @@ export function OutlineView() {
                       <button
                         key={`${item.id}-focus-pill`}
                         type="button"
-                        className={styles.segmentPillInline}
+                        className={`${styles.segmentPillInline} ${isSegmentSelected(item.id) ? styles.segmentPillInlineActive : isSegmentContext ? styles.segmentPillInlineDimmed : ''}`}
                         style={{ left: `${item.x}px`, top: `${focusMergeY}px`, width: `${item.width}px` }}
-                        onClick={() => setFocus({ type: 'segment', id: item.id, title: item.title })}
+                        onClick={() => selectSegment(item.id, item.title)}
                       >
                         {item.title}
                       </button>
                     ))
                   ) : (
                     <div
-                      className={styles.segmentContainerInline}
+                      className={`${styles.segmentContainerInline} ${isSegmentSelected(primaryJunction.id) ? styles.segmentContainerInlineActive : ''}`}
                       style={{ left: `${primaryJunctionLeftX}px`, top: `${focusMergeY}px`, width: `${primaryJunctionWidth}px` }}
                     >
                       <button
                         type="button"
-                        className={styles.segmentBadge}
-                        onClick={() => setFocus({ type: 'segment', id: primaryJunction.id, title: primaryJunction.title })}
+                        className={`${styles.segmentBadge} ${isSegmentSelected(primaryJunction.id) ? styles.segmentBadgeActive : ''}`}
+                        onClick={() => selectSegment(primaryJunction.id, primaryJunction.title)}
                       >
                         JUNCTION · {primaryJunction.title}（共享）
                       </button>
@@ -660,8 +841,8 @@ export function OutlineView() {
                           <button
                             key={`${slice.id}-focus-segment`}
                             type="button"
-                            className={styles.segmentChildCard}
-                            onClick={() => setFocus({ type: 'slice', id: `seg-${slice.id}`, title: slice.title })}
+                            className={`${styles.segmentChildCard} ${focus?.type === 'slice' && focus.id === `seg-${slice.id}` ? styles.segmentChildCardActive : ''}`}
+                            onClick={() => selectSlice(`seg-${slice.id}`, slice.title)}
                           >
                             <span className={styles.sliceTitle}>{slice.title}</span>
                             <span className={styles.sliceMeta}>{slice.meta}</span>
@@ -675,9 +856,9 @@ export function OutlineView() {
                     <button
                       key={`${line.id}-focus-after`}
                       type="button"
-                      className={styles.graphCard}
+                      className={`${styles.graphCard} ${focus?.type === 'slice' && focus.id === `${line.id}-${afterSlice.id}` ? styles.graphCardActive : ''}`}
                       style={{ left: `${afterNodeX - 54}px`, top: `${focusBranchY[index] - 33}px` }}
-                      onClick={() => setFocus({ type: 'slice', id: `${line.id}-${afterSlice.id}`, title: afterSlice.title })}
+                      onClick={() => selectSlice(`${line.id}-${afterSlice.id}`, afterSlice.title)}
                     >
                       <span className={styles.sliceTitle}>{afterSlice.title}</span>
                       <span className={styles.sliceMeta}>{afterSlice.meta}</span>
@@ -697,14 +878,49 @@ export function OutlineView() {
             <button type="button" className={styles.iconBtn} onClick={() => setFocus(null)}>×</button>
           </header>
           <div className={styles.rightTabs}>
-            <button type="button" className={`${styles.tab} ${styles.tabActive}`}>信息</button>
-            <button type="button" className={styles.tab}>结构操作</button>
-            <button type="button" className={styles.tab}>设定卡</button>
+            <button type="button" className={`${styles.tab} ${rightTab === 'info' ? styles.tabActive : ''}`} onClick={() => setRightTab('info')}>信息</button>
+            <button type="button" className={`${styles.tab} ${rightTab === 'structure' ? styles.tabActive : ''}`} onClick={() => setRightTab('structure')}>结构操作</button>
+            <button type="button" className={`${styles.tab} ${rightTab === 'cards' ? styles.tabActive : ''}`} onClick={() => setRightTab('cards')}>设定卡</button>
           </div>
           <div className={styles.rightContent}>
-            <p>当前对象：{focus?.title ?? '无'}</p>
-            <p>共享段切片：{segmentSlices.map((slice) => slice.title).join(' / ')}</p>
-            <p>场景说明：{scenario.notes}</p>
+            {rightTab === 'info' ? (
+              <>
+                <p>当前对象：{focus?.title ?? '无'}</p>
+                <p>对象类型：{focus ? (focus.type === 'line' ? '故事线' : focus.type === 'segment' ? '交汇段' : '切片') : '未选中'}</p>
+                <p>所属交汇段：{selectedJunction ? selectedJunction.title : '无'}</p>
+                <p>场景说明：{scenario.notes}</p>
+              </>
+            ) : rightTab === 'structure' ? (
+              <>
+                <p>交汇段数量：{junctions.length}</p>
+                <p>当前段参与线：{selectedJunction ? selectedJunction.lineIds.length : primaryJunction.lineIds.length}</p>
+                <p>主段切片：{focusSegmentSlices.map((slice) => slice.title).join(' / ')}</p>
+                <div className={styles.lineActivator}>
+                  {(selectedJunction?.lineIds ?? primaryJunction.lineIds).map((lineId) => {
+                    const targetLine = lines.find((line) => line.id === lineId);
+                    if (!targetLine) {
+                      return null;
+                    }
+                    return (
+                      <button
+                        key={`activate-${lineId}`}
+                        type="button"
+                        className={`${styles.lineActivatorBtn} ${activeLine.id === lineId ? styles.lineActivatorBtnActive : ''}`}
+                        onClick={() => activateLineOnly(lineId)}
+                      >
+                        <span className={styles.lineDot} style={{ backgroundColor: targetLine.color }} />
+                        <span>{targetLine.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <p>卡片总数：{[...beforeSlices, ...focusSegmentSlices, afterSlice].length}</p>
+                <p>高亮线：{Array.from(selectedLineIds).join(' / ') || '无'}</p>
+              </>
+            )}
           </div>
         </aside>
       </div>
