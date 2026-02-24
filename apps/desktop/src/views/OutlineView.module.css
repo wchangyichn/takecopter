@@ -312,11 +312,6 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--outline-accent) 48%, var(--outline-border));
 }
 
-.graphLineLabelDimmed {
-  opacity: 0.28;
-  filter: saturate(0.35) brightness(0.78);
-}
-
 .graphLineLabelPrimary {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 72%, var(--outline-border));
   background: color-mix(in srgb, var(--outline-accent) 34%, var(--outline-bg-2));
@@ -337,10 +332,6 @@
 .graphNodeActive {
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--outline-accent) 44%, transparent);
   transform: translate(-50%, -50%) scale(1.14);
-}
-
-.graphNodeDimmed {
-  opacity: 0.22;
 }
 
 .graphNodeNeutral {
@@ -459,11 +450,6 @@
   border-color: color-mix(in srgb, var(--outline-accent) 58%, var(--outline-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--outline-accent) 48%, transparent);
   background: color-mix(in srgb, var(--outline-accent) 24%, var(--outline-bg-2));
-}
-
-.graphCardDimmed {
-  opacity: 0.24;
-  filter: saturate(0.4) brightness(0.8);
 }
 
 .sliceTitle {

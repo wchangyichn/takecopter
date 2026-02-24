@@ -210,6 +210,12 @@ function clampZoom(value: number) {
 
 const ALL_VIEW_ZOOM_THRESHOLD = 78;
 const FOCUS_VIEW_ZOOM_THRESHOLD = 128;
+const SEGMENT_GLOW_ACTIVE_WIDTH = '9';
+const SEGMENT_GLOW_ACTIVE_OPACITY = '0.24';
+const SEGMENT_GLOW_PARTICIPANT_WIDTH = '4';
+const SEGMENT_GLOW_PARTICIPANT_OPACITY = '0.12';
+const SEGMENT_TRUNK_GLOW_OPACITY = '0.12';
+const SEGMENT_TRUNK_ACTIVE_OPACITY = '0.18';
 
 function useOutlineSelectionState({
   focus,
@@ -621,10 +627,10 @@ export function OutlineView() {
                     {lines.map((line, index) => (
                       <g key={`${line.id}-all-path`}>
                         {isSegmentContext && activeLine.id === line.id && (
-                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
                         )}
                         {isSegmentContext && selectedLineIds.has(line.id) && (
-                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                          <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                         )}
                         <path d={`M ${layout.preAX} ${allBranchY[index]} L ${layout.preBX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         {participantSet.has(line.id) ? (
@@ -633,12 +639,12 @@ export function OutlineView() {
                               <>
                                 {activeLine.id === line.id && (
                                   <>
-                                    <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
-                                    <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                    <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
+                                    <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
                                   </>
                                 )}
-                                <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
-                                <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                                <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
+                                <path d={`M ${splitX} ${allMergeY} C ${splitX + 30} ${allMergeY} ${splitX + 40} ${allBranchY[index]} ${afterNodeX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                               </>
                             )}
                             <path d={`M ${layout.preBX} ${allBranchY[index]} C 410 ${allBranchY[index]} 430 ${allMergeY} ${layout.mergeX} ${allMergeY}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
@@ -648,16 +654,16 @@ export function OutlineView() {
                           <path d={`M ${layout.preBX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         )}
                         {isSegmentContext && selectedLineIds.has(line.id) && (
-                          <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? '9' : '4'} fill="none" opacity={activeLine.id === line.id ? '0.24' : '0.12'} />
+                          <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? SEGMENT_GLOW_ACTIVE_WIDTH : SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={activeLine.id === line.id ? SEGMENT_GLOW_ACTIVE_OPACITY : SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                         )}
                         <path d={`M ${afterNodeX} ${allBranchY[index]} L ${trunkEndX} ${allBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                       </g>
                     ))}
                     {isSegmentContext && (
-                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke="#8ba2ff" strokeWidth="4" fill="none" opacity="0.12" />
+                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke="#8ba2ff" strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_TRUNK_GLOW_OPACITY} />
                     )}
                     {activeLineInSegment && (
-                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke={activeLine.color} strokeWidth="9" fill="none" opacity="0.18" />
+                      <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke={activeLine.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_TRUNK_ACTIVE_OPACITY} />
                     )}
                     <path d={`M ${layout.mergeX} ${allMergeY} L ${splitX} ${allMergeY}`} stroke="#9aa0b3" strokeWidth="2" fill="none" />
                   </svg>
@@ -728,10 +734,10 @@ export function OutlineView() {
                     {lines.map((line, index) => (
                       <g key={`${line.id}-focus-path`}>
                         {isSegmentContext && activeLine.id === line.id && (
-                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
                         )}
                         {isSegmentContext && selectedLineIds.has(line.id) && (
-                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                          <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                         )}
                         <path d={`M ${layout.preAX} ${focusBranchY[index]} L ${layout.preBX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         {participantSet.has(line.id) ? (
@@ -740,14 +746,14 @@ export function OutlineView() {
                               <>
                                 {activeLine.id === line.id && (
                                   <>
-                                    <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
-                                    <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
-                                    <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="9" fill="none" opacity="0.24" />
+                                    <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
+                                    <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
+                                    <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_GLOW_ACTIVE_OPACITY} />
                                   </>
                                 )}
-                                <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
-                                <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
-                                <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="4" fill="none" opacity="0.12" />
+                                <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
+                                <path d={`M ${layout.branchInputX} ${focusBranchY[index]} C 530 ${focusBranchY[index]} 548 ${focusMergeY} ${layout.mergeX} ${focusMergeY}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
+                                <path d={`M ${splitX} ${focusMergeY} C ${splitX + 30} ${focusMergeY} ${splitX + 42} ${focusBranchY[index]} ${afterNodeX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                               </>
                             )}
                             <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${layout.branchInputX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
@@ -758,16 +764,16 @@ export function OutlineView() {
                           <path d={`M ${layout.preBX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                         )}
                         {isSegmentContext && selectedLineIds.has(line.id) && (
-                          <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? '9' : '4'} fill="none" opacity={activeLine.id === line.id ? '0.24' : '0.12'} />
+                          <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth={activeLine.id === line.id ? SEGMENT_GLOW_ACTIVE_WIDTH : SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={activeLine.id === line.id ? SEGMENT_GLOW_ACTIVE_OPACITY : SEGMENT_GLOW_PARTICIPANT_OPACITY} />
                         )}
                         <path d={`M ${afterNodeX} ${focusBranchY[index]} L ${trunkEndX} ${focusBranchY[index]}`} stroke={line.color} strokeWidth="2" fill="none" opacity={lineOpacity(line.id)} />
                       </g>
                     ))}
                     {isSegmentContext && (
-                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke="#8ba2ff" strokeWidth="4" fill="none" opacity="0.12" />
+                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke="#8ba2ff" strokeWidth={SEGMENT_GLOW_PARTICIPANT_WIDTH} fill="none" opacity={SEGMENT_TRUNK_GLOW_OPACITY} />
                     )}
                     {activeLineInSegment && (
-                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke={activeLine.color} strokeWidth="9" fill="none" opacity="0.18" />
+                      <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke={activeLine.color} strokeWidth={SEGMENT_GLOW_ACTIVE_WIDTH} fill="none" opacity={SEGMENT_TRUNK_ACTIVE_OPACITY} />
                     )}
                     <path d={`M ${layout.mergeX} ${focusMergeY} L ${splitX} ${focusMergeY}`} stroke="#9aa0b3" strokeWidth="2" fill="none" />
                   </svg>
